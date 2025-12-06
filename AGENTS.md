@@ -41,10 +41,6 @@ The server exposes three MCP tools:
 
 **Configuration:** Loaded from environment variables via `ServerConfig.from_env()`. Required: `GOOGLE_API_KEY`. Optional: `BANANA_MODEL`, `BANANA_RETRY_ATTEMPTS`, `BANANA_RETRY_TIMEOUT`, `BANANA_MAX_PROMPT_LENGTH`.
 
-## Issue Tracking
-
-This project uses [beads](https://github.com/steveyegge/beads) (`bd` command) for issue tracking instead of markdown TODOs.
-
 ## Commit Guidelines
 
 Uses [Conventional Commits](https://www.conventionalcommits.org/) for automatic semantic versioning:
@@ -59,17 +55,77 @@ Use `uv run cz commit` for guided commit formatting.
 
 This project uses [bd (beads)](https://github.com/steveyegge/beads) for issue tracking. Use `bd` commands instead of markdown TODOs or TodoWrite.
 
+### Session Protocol
+
+**At Session Start:**
+1. Check for updates: `bd info --whats-new`
+2. Find ready work: `bd ready --json`
+
+**During Work:**
+- Create issues for discovered work with `--deps discovered-from:<parent-id>`
+- Always include meaningful descriptions explaining "why", "what", and "how"
+- Use `--json` flags for programmatic parsing
+
+**At Session End:**
+> **CRITICAL**: Run `bd sync` to flush changes and push. Work is not done until synced.
+
+### Commands Reference
+
 ```bash
-bd ready              # See available work
-bd create "Title" --type=task|bug|feature
-bd update <id> --status=in_progress
-bd close <id>
-bd sync               # Sync with remote
+# Discovery
+bd ready --json                    # Find unblocked work
+bd list --status=open --json       # All open issues
+bd show <id> --json                # Issue details
+bd stale --days 30 --json          # Find forgotten issues
+
+# Creating issues
+bd create "Title" --description="Context" --type=bug|feature|task --json
+bd create "Title" --deps discovered-from:<parent-id> --json  # Link to parent
+
+# Issue lifecycle
+bd update <id> --status=in_progress --json   # Claim work
+bd close <id> --reason="Done" --json         # Complete
+bd close <id1> <id2> ...                     # Close multiple
+
+# Dependencies
+bd dep add <issue> <depends-on>    # Add dependency
+bd dep tree <id>                   # View hierarchy
+bd blocked                         # Show blocked issues
+
+# Maintenance
+bd sync                            # Force sync (ALWAYS run at session end)
+bd duplicates                      # Find duplicates
 ```
 
-### Workflow
+### Issue Types and Priorities
 
-1. Check ready work: `bd ready`
-2. Claim task: `bd update <id> --status=in_progress`
-3. Complete work: `bd close <id>`
-4. Sync: `bd sync`
+**Types:** `bug`, `feature`, `task`, `epic`, `chore`
+
+**Priorities:**
+- `0` - Critical (production down)
+- `1` - High (blocking work)
+- `2` - Medium (default)
+- `3` - Low (nice to have)
+- `4` - Backlog (someday)
+
+### Dependency Direction (Common Pitfall)
+
+Dependencies express "needs" not "comes before":
+
+```bash
+# WRONG (temporal thinking): "Phase 1 comes before Phase 2"
+bd dep add phase1 phase2
+
+# CORRECT (requirement thinking): "Phase 2 needs Phase 1"
+bd dep add phase2 phase1
+```
+
+Verify with `bd blocked` - blocked issues should make logical sense.
+
+### Best Practices
+
+1. **Always include descriptions** - Issues without context waste future time
+2. **Use `--json` flags** - Essential for programmatic parsing by agents
+3. **Run `bd sync` at session end** - Prevents data loss
+4. **Check `bd ready` first** - Shows unblocked work automatically
+5. **Link discovered issues** - Use `--deps discovered-from:<id>` to track where issues came from
