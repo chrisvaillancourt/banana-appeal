@@ -4,12 +4,18 @@ This document describes the image generation capabilities available through the 
 
 ## Available Models
 
-| Model | Best For | Features |
-|-------|----------|----------|
-| `gemini-2.5-flash-image` | Fast generation, simple edits | Quick turnaround, good for iteration |
-| `gemini-3-pro-image-preview` | Complex tasks, high quality | 4K output, advanced text rendering, Google Search grounding, multi-image references |
+| Model | Nickname | Best For | Max Images | Features |
+|-------|----------|----------|------------|----------|
+| `gemini-2.5-flash-image` | nano-banana | Fast generation, simple edits | 3 | Quick, cheap, good for iteration |
+| `gemini-3-pro-image-preview` | nano-banana-pro | Complex tasks, high quality | 14 (6 high-fidelity) | 4K, text rendering, search grounding, thinking |
 
 **Current default:** `gemini-2.0-flash-preview-image-generation`
+
+**Recommendation:** Use `gemini-2.5-flash-image` as default for speed/cost. Switch to `gemini-3-pro-image-preview` for:
+- Text-heavy images (diagrams, infographics)
+- 2K/4K resolution needs
+- Real-time data (weather, current events)
+- Complex multi-image compositions (>3 images)
 
 ## Core Capabilities
 
@@ -31,11 +37,20 @@ Modify existing images using natural language instructions:
 
 ### Multi-Image Blending
 
-Combine multiple reference images (up to 14) with a creative prompt:
+Combine multiple reference images with a creative prompt:
 
+| Model | Max Images | High-Fidelity Limit |
+|-------|------------|---------------------|
+| Flash | 3 | 3 |
+| Pro | 14 | 6 |
+
+Use cases:
 - Style transfer from reference images
 - Character consistency across generations
-- Object + human reference images (6 object + 5 human max for Gemini 3 Pro)
+- Product compositions with multiple items
+- Object + human reference images
+
+**Tip:** To exceed the image limit, combine multiple images into a single collage first, then pass it as one image.
 
 ### Text Rendering
 
@@ -226,6 +241,94 @@ config = GenerateContentConfig(
 | 3:2 | Photography standard |
 | 21:9 | Ultrawide, cinematic |
 
+**Default behavior:** The model matches input image dimensions when editing. For generation without input images, it defaults to 1:1.
+
+### Resolution and Token Costs (Pro Model)
+
+| Aspect Ratio | 1K Resolution | 2K Resolution | 4K Resolution |
+|--------------|---------------|---------------|---------------|
+| 1:1 | 1024x1024 | 2048x2048 | 4096x4096 |
+| 16:9 | 1376x768 | 2752x1536 | 5504x3072 |
+| 9:16 | 768x1376 | 1536x2752 | 3072x5504 |
+| 3:2 | 1264x848 | 2528x1696 | 5056x3392 |
+
+**Token costs:**
+- 1K and 2K: ~1210 tokens (same price)
+- 4K: ~2000 tokens (more expensive)
+
+### Search Grounding Notes
+
+When using Google Search grounding with Pro model:
+- Must include both `TEXT` and `IMAGE` in `response_modalities`
+- Image-only mode doesn't work with grounding
+- Only text search results are used (not image search results)
+
+## Creative Use Cases
+
+Beyond coding workflows, Gemini excels at these creative tasks:
+
+### Sprite Sheets for Games
+
+```
+Sprite sheet of a jumping character, 3x3 grid, white background,
+sequence, frame by frame animation, square aspect ratio.
+```
+
+### Photo Colorization
+
+```
+Restore and colorize this historical black and white photograph from 1932.
+```
+
+### Style Transfer
+
+```
+Create a version of this image as if they were living in the 1980s,
+capturing the fashion, hairstyles, and atmosphere of that era.
+```
+
+### Sticker Creation
+
+```
+Create a single sticker in Pop Art style. Bold, thick black outlines.
+Vibrant primary colors in flat, unshaded blocks. Include visible
+Ben-Day dots for texture.
+```
+
+### Mini-Figurine Generation
+
+```
+Create a 1/7 scale collectible figurine of this character in realistic style,
+placed on a desk next to its packaging box designed like high-quality collectibles.
+```
+
+### Map to View Transformation
+
+```
+Show me what we would see from this location marked on the map.
+```
+
+## Chat Mode (Recommended for Editing)
+
+For iterative image editing, chat/multi-turn mode is recommended over single calls. The SDK maintains context automatically through "thought signatures."
+
+```python
+chat = client.chats.create(model="gemini-2.5-flash-image")
+
+# First generation
+response = chat.send_message("Create a fox figurine in a bedroom")
+
+# Iterative refinements - model remembers the fox
+response = chat.send_message("Add a blue planet on its helmet")
+response = chat.send_message("Move it to a beach setting")
+response = chat.send_message("Now it should be cooking a barbecue")
+```
+
+**Benefits of chat mode:**
+- Character consistency across edits
+- Context preservation (model remembers previous images)
+- More natural iterative workflow
+
 ## Future Enhancements
 
 Features from the Gemini API that could be added to Banana Appeal:
@@ -236,3 +339,15 @@ Features from the Gemini API that could be added to Banana Appeal:
 4. **Negative prompts** - Specify what to exclude from generation
 5. **Image upscaling** - Enhance resolution of existing images
 6. **Seed parameter** - Reproducible generation for iteration
+7. **Chat/multi-turn mode** - Maintain context across multiple edits
+8. **Thinking config** - Access Pro model's reasoning process
+
+## References
+
+Official documentation and resources used to compile this guide:
+
+- [Gemini 3 Developer Guide](https://ai.google.dev/gemini-api/docs/gemini-3) - Model capabilities and thinking features
+- [Image Generation Documentation](https://ai.google.dev/gemini-api/docs/image-generation) - API reference and prompting strategies
+- [Image Understanding Documentation](https://ai.google.dev/gemini-api/docs/image-understanding) - Input formats and analysis capabilities
+- [Gemini Cookbook](https://github.com/google-gemini/cookbook) - Official examples and notebooks
+- [Native Image Generation Notebook](https://github.com/google-gemini/cookbook/blob/main/quickstarts/Get_Started_Nano_Banana.ipynb) - Comprehensive examples for nano-banana models
