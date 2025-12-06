@@ -93,7 +93,9 @@ Or if installed locally with uv:
 
 ## Usage
 
-Once configured, Claude Code will have access to these tools:
+Once configured, Claude Code will have access to these tools.
+
+> **Tip:** See [docs/gemini-capabilities.md](docs/gemini-capabilities.md) for detailed prompting strategies and use cases for coding workflows.
 
 ### generate_image
 

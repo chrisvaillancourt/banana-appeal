@@ -41,6 +41,8 @@ The server exposes three MCP tools:
 
 **Configuration:** Loaded from environment variables via `ServerConfig.from_env()`. Required: `GOOGLE_API_KEY`. Optional: `BANANA_MODEL`, `BANANA_RETRY_ATTEMPTS`, `BANANA_RETRY_TIMEOUT`, `BANANA_MAX_PROMPT_LENGTH`.
 
+**Gemini capabilities:** See [docs/gemini-capabilities.md](docs/gemini-capabilities.md) for detailed documentation on Gemini's image generation features, prompting strategies, and coding workflow use cases.
+
 ## Commit Guidelines
 
 Uses [Conventional Commits](https://www.conventionalcommits.org/) for automatic semantic versioning:
