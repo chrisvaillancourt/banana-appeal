@@ -4,7 +4,9 @@
       "Bash(bd:*)",
       "Bash(git add:*)"
     ],
-    "deny": [],
+    "deny": [
+      "TodoWrite"
+    ],
     "ask": []
   }
 }
