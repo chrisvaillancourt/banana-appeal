@@ -108,7 +108,17 @@ bd duplicates                      # Find duplicates
 - `3` - Low (nice to have)
 - `4` - Backlog (someday)
 
-### Dependency Direction (Common Pitfall)
+### Planning Work with Dependencies
+
+#### Cognitive Trap: Temporal Language
+
+Phrases like "Phase 1," "Step 1," or "before" can **invert dependency direction** in your thinking. Your brain interprets temporal sequencing as dependency flow, leading to backwards logic.
+
+**The problem:** Saying "Phase 1 comes before Phase 2" makes you think `bd dep add phase1 phase2`, but this incorrectly states that phase1 depends on phase2.
+
+**The solution:** Use requirement-based language focused on what tasks *need*, not when they occur. Name tasks by their actual function rather than execution order.
+
+#### Dependency Direction
 
 Dependencies express "needs" not "comes before":
 
@@ -120,7 +130,20 @@ bd dep add phase1 phase2
 bd dep add phase2 phase1
 ```
 
-Verify with `bd blocked` - blocked issues should make logical sense.
+#### Example: Multi-Task Dependencies
+
+```bash
+# Create tasks named by function, not order
+bd create "Implement conversation region" -t task -p 1
+bd create "Add header-line status display" -t task -p 1
+bd create "Render tool calls inline" -t task -p 2
+
+# Establish dependencies based on requirements
+bd dep add header-line conversation-region    # header needs conversation region
+bd dep add tool-calls conversation-region     # tool calls need conversation region
+```
+
+Verify with `bd blocked` - tasks should be blocked by their actual prerequisites.
 
 ### Best Practices
 
@@ -129,3 +152,20 @@ Verify with `bd blocked` - blocked issues should make logical sense.
 3. **Run `bd sync` at session end** - Prevents data loss
 4. **Check `bd ready` first** - Shows unblocked work automatically
 5. **Link discovered issues** - Use `--deps discovered-from:<id>` to track where issues came from
+
+### Managing Planning Documents
+
+Store AI-generated planning materials (PLAN.md, ARCHITECTURE.md, DESIGN.md, etc.) in a `history/` directory rather than the repository root.
+
+```
+history/
+├── PLAN-feature-x.md
+├── ARCHITECTURE-v2.md
+└── DESIGN-auth-refactor.md
+```
+
+**Benefits:**
+- Keeps repository root clean and focused on production code
+- Clearly distinguishes ephemeral planning from permanent documentation
+- Preserves planning history for reference
+- Can be excluded from version control if needed (add `history/` to `.gitignore`)
