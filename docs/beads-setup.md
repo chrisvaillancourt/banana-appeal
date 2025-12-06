@@ -179,28 +179,9 @@ bd doctor
 
 ## Claude Code Integration
 
-### CLI + Hooks (Recommended)
+Claude Code uses `bd` commands directly via the CLI.
 
-This is the default mode. Claude Code uses `bd` commands directly.
-
-The session start hook (`bd prime`) injects workflow context into Claude's system prompt.
-
-### Plugin (Optional)
-
-Provides `/bd-*` slash commands in Claude Code.
-
-```bash
-# Install plugin
-/plugin marketplace add steveyegge/beads
-/plugin install beads
-```
-
-Slash commands:
-- `/bd-ready` - Find tasks with no blockers
-- `/bd-create` - Create new issues
-- `/bd-update` - Update issue status
-- `/bd-close` - Close issues
-- `/bd-show` - Show issue details
+The session start hook (`bd prime`) injects workflow context into Claude's system prompt automatically when a `.beads/` directory is detected.
 
 ## Common Commands
 
