@@ -75,6 +75,18 @@ uv run fastmcp dev src/banana_appeal/server.py
 uv run banana-appeal
 ```
 
+## Issue Tracking
+
+This project uses [beads](https://github.com/steveyegge/beads) for issue tracking.
+
+```bash
+bd ready              # See available work
+bd create --title="Fix bug" --type=bug
+bd update <id> --status=in_progress
+bd close <id>
+bd sync               # Sync with remote
+```
+
 ## Commit Guidelines
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/) for automatic semantic versioning.
