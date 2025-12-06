@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Self
 
@@ -17,7 +17,7 @@ from pydantic import (
 )
 
 
-class ImageFormat(str, Enum):
+class ImageFormat(StrEnum):
     """Supported image formats."""
 
     PNG = "png"
