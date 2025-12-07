@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from enum import StrEnum
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Self
 
@@ -49,6 +50,11 @@ class ImageResolution(StrEnum):
     HIGH = "4K"
 
 
+# Model name patterns that indicate Pro-tier capabilities
+# Pro models support: 2K/4K resolution, up to 14 images for blending, search grounding
+PRO_MODEL_PATTERNS = ("gemini-3-pro", "gemini-pro")
+
+
 class ServerConfig(BaseModel):
     """Server configuration loaded from environment variables."""
 
@@ -90,21 +96,26 @@ class ServerConfig(BaseModel):
             max_prompt_length=int(os.environ.get("BANANA_MAX_PROMPT_LENGTH", "10000")),
         )
 
-    @property
+    @cached_property
+    def is_pro_model(self) -> bool:
+        """Check if the current model is a Pro model (supports advanced features).
+
+        Pro models support:
+        - 2K/4K resolution output
+        - Up to 14 images for blending (6 high-fidelity)
+        - Google Search grounding
+        """
+        model_lower = self.model_name.lower()
+        return any(pattern in model_lower for pattern in PRO_MODEL_PATTERNS)
+
+    @cached_property
     def max_blend_images(self) -> int:
         """Get the maximum number of images for blending based on the model.
 
-        - gemini-2.5-flash-image: 3 images max
-        - gemini-3-pro-image-preview: 14 images max (6 high-fidelity)
+        - Flash models (gemini-2.5-flash-image): 3 images max
+        - Pro models (gemini-3-pro-image-preview): 14 images max (6 high-fidelity)
         """
-        if "pro" in self.model_name.lower():
-            return 14
-        return 3
-
-    @property
-    def is_pro_model(self) -> bool:
-        """Check if the current model is a Pro model (supports advanced features)."""
-        return "pro" in self.model_name.lower()
+        return 14 if self.is_pro_model else 3
 
 
 class ConfigurationError(Exception):
@@ -124,9 +135,7 @@ class GenerateImageRequest(BaseModel):
     resolution: ImageResolution | None = Field(
         default=None, description="Output resolution: 1K, 2K, or 4K (default: 1K)"
     )
-    seed: int | None = Field(
-        default=None, ge=0, description="Seed for reproducible generation"
-    )
+    seed: int | None = Field(default=None, ge=0, description="Seed for reproducible generation")
 
     @field_validator("prompt")
     @classmethod

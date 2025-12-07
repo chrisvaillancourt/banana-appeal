@@ -183,7 +183,9 @@ async def _call_gemini_api(
     retry_count = 0
     prompt_length = len(contents) if isinstance(contents, str) else len(str(contents[0]))
 
-    # Build ImageConfig if any image-specific options are set
+    # Build ImageConfig for image-specific options (aspect ratio, resolution)
+    # Note: seed is a generation parameter, not an image config parameter,
+    # so it goes directly on GenerateContentConfig rather than ImageConfig
     image_config = None
     if aspect_ratio or resolution:
         image_config = ImageConfig(
@@ -511,9 +513,7 @@ async def generate_image(
     save_path: Annotated[str | None, Field(description="Optional path to save the image")] = None,
     aspect_ratio: Annotated[
         str | None,
-        Field(
-            description="Aspect ratio: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, or 21:9"
-        ),
+        Field(description="Aspect ratio: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, or 21:9"),
     ] = None,
     resolution: Annotated[
         str | None,
@@ -526,9 +526,18 @@ async def generate_image(
 
     Returns the generated image, or saves it to the specified path.
     """
-    # Convert string parameters to enum types
-    ar = AspectRatio(aspect_ratio) if aspect_ratio else None
-    res = ImageResolution(resolution) if resolution else None
+    # Convert string parameters to enum types with helpful error messages
+    try:
+        ar = AspectRatio(aspect_ratio) if aspect_ratio else None
+    except ValueError:
+        valid = ", ".join(r.value for r in AspectRatio)
+        return f"Error: Invalid aspect_ratio '{aspect_ratio}'. Valid options: {valid}"
+
+    try:
+        res = ImageResolution(resolution) if resolution else None
+    except ValueError:
+        valid = ", ".join(r.value for r in ImageResolution)
+        return f"Error: Invalid resolution '{resolution}'. Valid options: {valid}"
 
     result = await _generate_image_impl(
         prompt=prompt,

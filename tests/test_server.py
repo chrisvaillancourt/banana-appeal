@@ -20,6 +20,7 @@ from banana_appeal.server import (
     _edit_image_impl,
     _extract_image_data,
     _generate_image_impl,
+    generate_image,
 )
 
 
@@ -470,3 +471,75 @@ class TestModelValidation:
 
         # Should succeed, not error about image count
         assert result.success is True
+
+    async def test_none_parameters_allowed(self, mock_genai_client):
+        """Test that None/default parameters don't trigger validation errors."""
+        result = await _generate_image_impl(
+            prompt="a sunset",
+            aspect_ratio=None,
+            resolution=None,
+            seed=None,
+        )
+        assert result.success is True
+
+    async def test_invalid_aspect_ratio_returns_helpful_error(self, mock_genai_client):
+        """Test that invalid aspect_ratio returns a helpful error message."""
+        # Access the underlying function via the tool's fn attribute
+        result = await generate_image.fn(
+            prompt="a sunset",
+            aspect_ratio="invalid",
+        )
+        assert isinstance(result, str)
+        assert "Error: Invalid aspect_ratio" in result
+        assert "1:1" in result  # Should list valid options
+
+    async def test_invalid_resolution_returns_helpful_error(self, mock_genai_client):
+        """Test that invalid resolution returns a helpful error message."""
+        result = await generate_image.fn(
+            prompt="a sunset",
+            resolution="8K",
+        )
+        assert isinstance(result, str)
+        assert "Error: Invalid resolution" in result
+        assert "1K" in result  # Should list valid options
+
+
+class TestServerConfigProperties:
+    """Tests for ServerConfig cached properties."""
+
+    def test_is_pro_model_with_flash(self, monkeypatch):
+        """Test is_pro_model returns False for Flash models."""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+        monkeypatch.setenv("BANANA_MODEL", "gemini-2.5-flash-image")
+        config = ServerConfig.from_env()
+        assert config.is_pro_model is False
+        assert config.max_blend_images == 3
+
+    def test_is_pro_model_with_pro(self, monkeypatch):
+        """Test is_pro_model returns True for Pro models."""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+        monkeypatch.setenv("BANANA_MODEL", "gemini-3-pro-image-preview")
+        config = ServerConfig.from_env()
+        assert config.is_pro_model is True
+        assert config.max_blend_images == 14
+
+    def test_is_pro_model_pattern_matching(self, monkeypatch):
+        """Test Pro model detection with various patterns."""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+
+        # Test gemini-pro pattern
+        monkeypatch.setenv("BANANA_MODEL", "gemini-pro-vision")
+        config = ServerConfig.from_env()
+        assert config.is_pro_model is True
+
+        # Test that random "pro" in name doesn't match (must have pattern)
+        monkeypatch.setenv("BANANA_MODEL", "some-production-model")
+
+        # Need to create new config since cached_property
+
+        # Clear the cached_property by creating fresh config
+        config2 = ServerConfig(
+            api_key="test",
+            model_name="some-production-model",
+        )
+        assert config2.is_pro_model is False
