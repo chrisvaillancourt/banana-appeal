@@ -322,6 +322,14 @@ async def _generate_image_impl(
     ctx: Context | None = None,
 ) -> ImageResult:
     """Internal implementation of generate_image."""
+    # Validate resolution is supported by the current model
+    config = get_config()
+    if resolution and resolution != ImageResolution.LOW and not config.is_pro_model:
+        return ImageResult.from_error(
+            f"{resolution.value} resolution requires a Pro model (e.g., gemini-3-pro-image-preview). "
+            f"Current model ({config.model_name}) only supports 1K resolution."
+        )
+
     try:
         request = GenerateImageRequest(
             prompt=prompt,
@@ -426,6 +434,15 @@ async def _blend_images_impl(
     ctx: Context | None = None,
 ) -> ImageResult:
     """Internal implementation of blend_images."""
+    # Check model-specific limit before validation
+    config = get_config()
+    max_images = config.max_blend_images
+    if len(image_paths) > max_images:
+        return ImageResult.from_error(
+            f"Model {config.model_name} supports max {max_images} images for blending, "
+            f"but {len(image_paths)} were provided. Use a Pro model for more images."
+        )
+
     try:
         request = BlendImagesRequest(
             image_paths=image_paths,
@@ -499,7 +516,8 @@ async def generate_image(
         ),
     ] = None,
     resolution: Annotated[
-        str | None, Field(description="Output resolution: 1K (default), 2K, or 4K")
+        str | None,
+        Field(description="Output resolution: 1K (default), 2K, or 4K (2K/4K require Pro model)"),
     ] = None,
     seed: Annotated[int | None, Field(description="Seed for reproducible generation")] = None,
     ctx: Context | None = None,
@@ -573,15 +591,6 @@ async def blend_images(
     Combines up to 14 images according to the prompt instructions.
     Note: Flash models (gemini-2.5-flash-image) only support 3 images max.
     """
-    # Check model-specific limit
-    config = get_config()
-    max_images = config.max_blend_images
-    if len(image_paths) > max_images:
-        return (
-            f"Error: Model {config.model_name} supports max {max_images} images for blending, "
-            f"but {len(image_paths)} were provided. Use a Pro model for more images."
-        )
-
     result = await _blend_images_impl(
         image_paths=image_paths,
         prompt=prompt,

@@ -11,6 +11,7 @@ from banana_appeal.models import (
     EditImageRequest,
     GenerateImageRequest,
     ImageFormat,
+    ImageResolution,
     ImageResult,
     ServerConfig,
 )
@@ -352,9 +353,15 @@ class TestBlendImages:
         assert result.success is False
         assert "Invalid request" in result.error
 
-    async def test_blend_images_many_inputs(self, mock_genai_client, tmp_path):
-        """Test blending with multiple images."""
+    async def test_blend_images_many_inputs(self, monkeypatch, mock_genai_client, tmp_path):
+        """Test blending with multiple images (requires Pro model for >3 images)."""
         from PIL import Image
+
+        # Use Pro model for >3 images
+        monkeypatch.setenv("BANANA_MODEL", "gemini-3-pro-image-preview")
+        import banana_appeal.server as server_module
+
+        server_module._config = None
 
         paths = []
         for i in range(5):
@@ -369,3 +376,97 @@ class TestBlendImages:
 
         assert result.success is True
         assert result.data == b"fake_image_data"
+
+
+class TestModelValidation:
+    """Tests for model-specific parameter validation."""
+
+    async def test_resolution_2k_rejected_on_flash_model(self, mock_genai_client):
+        """Test that 2K resolution is rejected on Flash models."""
+        result = await _generate_image_impl(
+            prompt="a beautiful sunset",
+            resolution=ImageResolution.MEDIUM,
+        )
+
+        assert result.success is False
+        assert "2K resolution requires a Pro model" in result.error
+
+    async def test_resolution_4k_rejected_on_flash_model(self, mock_genai_client):
+        """Test that 4K resolution is rejected on Flash models."""
+        result = await _generate_image_impl(
+            prompt="a beautiful sunset",
+            resolution=ImageResolution.HIGH,
+        )
+
+        assert result.success is False
+        assert "4K resolution requires a Pro model" in result.error
+
+    async def test_resolution_1k_allowed_on_flash_model(self, mock_genai_client):
+        """Test that 1K resolution is allowed on Flash models."""
+        result = await _generate_image_impl(
+            prompt="a beautiful sunset",
+            resolution=ImageResolution.LOW,
+        )
+
+        # Should succeed, not error about resolution
+        assert result.success is True
+
+    async def test_resolution_2k_allowed_on_pro_model(self, monkeypatch, mock_genai_client):
+        """Test that 2K resolution is allowed on Pro models."""
+        monkeypatch.setenv("BANANA_MODEL", "gemini-3-pro-image-preview")
+
+        # Reset config to pick up new model
+        import banana_appeal.server as server_module
+
+        server_module._config = None
+
+        result = await _generate_image_impl(
+            prompt="a beautiful sunset",
+            resolution=ImageResolution.MEDIUM,
+        )
+
+        # Should succeed, not error about resolution
+        assert result.success is True
+
+    async def test_blend_limit_flash_model(self, mock_genai_client, tmp_path):
+        """Test that Flash models reject >3 images for blending."""
+        from PIL import Image
+
+        paths = []
+        for i in range(4):
+            path = tmp_path / f"img{i}.png"
+            Image.new("RGB", (50, 50), color="red").save(path)
+            paths.append(str(path))
+
+        result = await _blend_images_impl(
+            image_paths=paths,
+            prompt="blend all",
+        )
+
+        assert result.success is False
+        assert "max 3 images" in result.error
+
+    async def test_blend_limit_pro_model(self, monkeypatch, mock_genai_client, tmp_path):
+        """Test that Pro models allow >3 images for blending."""
+        from PIL import Image
+
+        monkeypatch.setenv("BANANA_MODEL", "gemini-3-pro-image-preview")
+
+        # Reset config to pick up new model
+        import banana_appeal.server as server_module
+
+        server_module._config = None
+
+        paths = []
+        for i in range(4):
+            path = tmp_path / f"img{i}.png"
+            Image.new("RGB", (50, 50), color="blue").save(path)
+            paths.append(str(path))
+
+        result = await _blend_images_impl(
+            image_paths=paths,
+            prompt="blend all",
+        )
+
+        # Should succeed, not error about image count
+        assert result.success is True
