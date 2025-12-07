@@ -532,14 +532,37 @@ class TestServerConfigProperties:
         config = ServerConfig.from_env()
         assert config.is_pro_model is True
 
-        # Test that random "pro" in name doesn't match (must have pattern)
-        monkeypatch.setenv("BANANA_MODEL", "some-production-model")
-
-        # Need to create new config since cached_property
-
-        # Clear the cached_property by creating fresh config
-        config2 = ServerConfig(
-            api_key="test",
-            model_name="some-production-model",
-        )
+        # Test that random "pro" in name doesn't match (must have "gemini" too)
+        config2 = ServerConfig(api_key="test", model_name="some-production-model")
         assert config2.is_pro_model is False
+
+        # Test that "gemini" alone doesn't match (must have "pro" too)
+        config3 = ServerConfig(api_key="test", model_name="gemini-flash-image")
+        assert config3.is_pro_model is False
+
+    def test_is_pro_model_future_versions(self):
+        """Test Pro model detection works for future model versions."""
+        # Should match future Pro versions
+        pro_models = [
+            "gemini-4-pro-image",
+            "gemini-5-pro",
+            "gemini-10-pro-vision",
+            "gemini-pro-ultra",
+            "GEMINI-PRO-IMAGE",  # Case insensitive
+        ]
+        for model in pro_models:
+            config = ServerConfig(api_key="test", model_name=model)
+            assert config.is_pro_model is True, f"{model} should be detected as Pro"
+            assert config.max_blend_images == 14, f"{model} should have 14 max blend"
+
+        # Should NOT match Flash models
+        flash_models = [
+            "gemini-4-flash",
+            "gemini-5.5-flash-image",
+            "gemini-flash-ultra",
+            "other-pro-model",  # Has "pro" but not "gemini"
+        ]
+        for model in flash_models:
+            config = ServerConfig(api_key="test", model_name=model)
+            assert config.is_pro_model is False, f"{model} should NOT be Pro"
+            assert config.max_blend_images == 3, f"{model} should have 3 max blend"

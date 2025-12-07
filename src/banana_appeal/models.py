@@ -50,9 +50,9 @@ class ImageResolution(StrEnum):
     HIGH = "4K"
 
 
-# Model name patterns that indicate Pro-tier capabilities
+# Pro model detection: model name must contain both "gemini" and "pro"
 # Pro models support: 2K/4K resolution, up to 14 images for blending, search grounding
-PRO_MODEL_PATTERNS = ("gemini-3-pro", "gemini-pro")
+# This handles current and future versions (gemini-3-pro, gemini-4-pro, gemini-pro-vision, etc.)
 
 
 class ServerConfig(BaseModel):
@@ -104,9 +104,12 @@ class ServerConfig(BaseModel):
         - 2K/4K resolution output
         - Up to 14 images for blending (6 high-fidelity)
         - Google Search grounding
+
+        Detection: model name must contain both "gemini" and "pro".
+        This handles current and future versions (gemini-3-pro, gemini-4-pro, etc.).
         """
         model_lower = self.model_name.lower()
-        return any(pattern in model_lower for pattern in PRO_MODEL_PATTERNS)
+        return "gemini" in model_lower and "pro" in model_lower
 
     @cached_property
     def max_blend_images(self) -> int:
