@@ -27,16 +27,18 @@ from fastmcp import Context, FastMCP
 from fastmcp.utilities.types import Image
 from google import genai
 from google.genai import errors as genai_errors
-from google.genai.types import GenerateContentConfig
+from google.genai.types import GenerateContentConfig, ImageConfig
 from pydantic import Field
 
 from banana_appeal.models import (
     APICallMetrics,
+    AspectRatio,
     BlendImagesRequest,
     ConfigurationError,
     EditImageRequest,
     GenerateImageRequest,
     ImageFormat,
+    ImageResolution,
     ImageResult,
     ServerConfig,
 )
@@ -167,6 +169,9 @@ async def _call_gemini_api(
     contents: str | list[Any],
     operation: str,
     image_count: int = 0,
+    aspect_ratio: AspectRatio | None = None,
+    resolution: ImageResolution | None = None,
+    seed: int | None = None,
 ) -> Any:
     """Call Gemini API with automatic retries on transient errors.
 
@@ -178,7 +183,19 @@ async def _call_gemini_api(
     retry_count = 0
     prompt_length = len(contents) if isinstance(contents, str) else len(str(contents[0]))
 
-    generation_config = GenerateContentConfig(response_modalities=["IMAGE", "TEXT"])
+    # Build ImageConfig if any image-specific options are set
+    image_config = None
+    if aspect_ratio or resolution:
+        image_config = ImageConfig(
+            aspect_ratio=aspect_ratio.value if aspect_ratio else None,
+            image_size=resolution.value if resolution else None,
+        )
+
+    generation_config = GenerateContentConfig(
+        response_modalities=["IMAGE", "TEXT"],
+        image_config=image_config,
+        seed=seed,
+    )
 
     @stamina.retry(
         on=_is_retryable_error,
@@ -299,11 +316,20 @@ mcp = FastMCP(
 async def _generate_image_impl(
     prompt: str,
     save_path: str | None = None,
+    aspect_ratio: AspectRatio | None = None,
+    resolution: ImageResolution | None = None,
+    seed: int | None = None,
     ctx: Context | None = None,
 ) -> ImageResult:
     """Internal implementation of generate_image."""
     try:
-        request = GenerateImageRequest(prompt=prompt, save_path=save_path)
+        request = GenerateImageRequest(
+            prompt=prompt,
+            save_path=save_path,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            seed=seed,
+        )
     except ValueError as e:
         return ImageResult.from_error(f"Invalid request: {e}")
 
@@ -311,7 +337,13 @@ async def _generate_image_impl(
         await ctx.info(f"Generating image: {request.prompt[:50]}...")
 
     try:
-        response = await _call_gemini_api(request.prompt, operation="generate")
+        response = await _call_gemini_api(
+            request.prompt,
+            operation="generate",
+            aspect_ratio=request.aspect_ratio,
+            resolution=request.resolution,
+            seed=request.seed,
+        )
     except GeminiAPIError as e:
         return ImageResult.from_error(str(e))
     except genai_errors.APIError as e:
@@ -460,13 +492,34 @@ async def _blend_images_impl(
 async def generate_image(
     prompt: Annotated[str, Field(min_length=1, description="Text description of the image")],
     save_path: Annotated[str | None, Field(description="Optional path to save the image")] = None,
+    aspect_ratio: Annotated[
+        str | None,
+        Field(
+            description="Aspect ratio: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, or 21:9"
+        ),
+    ] = None,
+    resolution: Annotated[
+        str | None, Field(description="Output resolution: 1K (default), 2K, or 4K")
+    ] = None,
+    seed: Annotated[int | None, Field(description="Seed for reproducible generation")] = None,
     ctx: Context | None = None,
 ) -> Image | str:
     """Generate an image from a text prompt using Gemini.
 
     Returns the generated image, or saves it to the specified path.
     """
-    result = await _generate_image_impl(prompt=prompt, save_path=save_path, ctx=ctx)
+    # Convert string parameters to enum types
+    ar = AspectRatio(aspect_ratio) if aspect_ratio else None
+    res = ImageResolution(resolution) if resolution else None
+
+    result = await _generate_image_impl(
+        prompt=prompt,
+        save_path=save_path,
+        aspect_ratio=ar,
+        resolution=res,
+        seed=seed,
+        ctx=ctx,
+    )
 
     if not result.success:
         return f"Error: {result.error}"
@@ -518,7 +571,17 @@ async def blend_images(
     """Blend multiple images together with a creative prompt.
 
     Combines up to 14 images according to the prompt instructions.
+    Note: Flash models (gemini-2.5-flash-image) only support 3 images max.
     """
+    # Check model-specific limit
+    config = get_config()
+    max_images = config.max_blend_images
+    if len(image_paths) > max_images:
+        return (
+            f"Error: Model {config.model_name} supports max {max_images} images for blending, "
+            f"but {len(image_paths)} were provided. Use a Pro model for more images."
+        )
+
     result = await _blend_images_impl(
         image_paths=image_paths,
         prompt=prompt,

@@ -9,9 +9,9 @@ This document describes the image generation capabilities available through the 
 | `gemini-2.5-flash-image` | nano-banana | Fast generation, simple edits | 3 | Quick, cheap, good for iteration |
 | `gemini-3-pro-image-preview` | nano-banana-pro | Complex tasks, high quality | 14 (6 high-fidelity) | 4K, text rendering, search grounding, thinking |
 
-**Current default:** `gemini-2.0-flash-preview-image-generation`
+**Current default:** `gemini-2.5-flash-image`
 
-**Recommendation:** Use `gemini-2.5-flash-image` as default for speed/cost. Switch to `gemini-3-pro-image-preview` for:
+**Recommendation:** Switch to `gemini-3-pro-image-preview` for:
 - Text-heavy images (diagrams, infographics)
 - 2K/4K resolution needs
 - Real-time data (weather, current events)
@@ -333,14 +333,21 @@ response = chat.send_message("Now it should be cooking a barbecue")
 
 Features from the Gemini API that could be added to Banana Appeal:
 
-1. **Aspect ratio and resolution control** - Let users specify output dimensions
-2. **Model selection** - Choose between speed (Flash) and quality (Pro)
-3. **Google Search grounding** - Generate images with real-time data
-4. **Negative prompts** - Specify what to exclude from generation
-5. **Image upscaling** - Enhance resolution of existing images
-6. **Seed parameter** - Reproducible generation for iteration
-7. **Chat/multi-turn mode** - Maintain context across multiple edits
-8. **Thinking config** - Access Pro model's reasoning process
+1. **Google Search grounding** - Generate images with real-time data (requires Pro model)
+2. **Image upscaling** - Enhance resolution of existing images via UpscaleImageConfig
+3. **Chat/multi-turn mode** - Maintain context across multiple edits
+4. **Thinking config** - Access Pro model's reasoning process
+
+### Already Implemented
+
+- **Aspect ratio control** - 10 supported ratios (1:1, 16:9, 9:16, etc.)
+- **Resolution control** - 1K, 2K, or 4K output
+- **Seed parameter** - Reproducible generation for iteration
+- **Model-aware blend limits** - Flash models limited to 3 images, Pro to 14
+
+### Not Available with Gemini Models
+
+- **Negative prompts** - Only supported with Imagen models (via `generate_image` API), not Gemini's native image generation (`generate_content` API)
 
 ## References
 

@@ -26,6 +26,29 @@ class ImageFormat(StrEnum):
     GIF = "gif"
 
 
+class AspectRatio(StrEnum):
+    """Supported aspect ratios for image generation."""
+
+    SQUARE = "1:1"
+    PORTRAIT_2_3 = "2:3"
+    LANDSCAPE_3_2 = "3:2"
+    PORTRAIT_3_4 = "3:4"
+    LANDSCAPE_4_3 = "4:3"
+    PORTRAIT_4_5 = "4:5"
+    LANDSCAPE_5_4 = "5:4"
+    PORTRAIT_9_16 = "9:16"
+    LANDSCAPE_16_9 = "16:9"
+    ULTRAWIDE = "21:9"
+
+
+class ImageResolution(StrEnum):
+    """Supported output resolutions (must be uppercase for Gemini API)."""
+
+    LOW = "1K"
+    MEDIUM = "2K"
+    HIGH = "4K"
+
+
 class ServerConfig(BaseModel):
     """Server configuration loaded from environment variables."""
 
@@ -34,7 +57,7 @@ class ServerConfig(BaseModel):
     # API configuration
     api_key: SecretStr = Field(description="Google API key for Gemini")
     model_name: str = Field(
-        default="gemini-2.0-flash-preview-image-generation",
+        default="gemini-2.5-flash-image",
         description="Gemini model to use",
     )
 
@@ -61,11 +84,27 @@ class ServerConfig(BaseModel):
 
         return cls(
             api_key=SecretStr(api_key),
-            model_name=os.environ.get("BANANA_MODEL", "gemini-2.0-flash-preview-image-generation"),
+            model_name=os.environ.get("BANANA_MODEL", "gemini-2.5-flash-image"),
             retry_attempts=int(os.environ.get("BANANA_RETRY_ATTEMPTS", "3")),
             retry_timeout_seconds=int(os.environ.get("BANANA_RETRY_TIMEOUT", "60")),
             max_prompt_length=int(os.environ.get("BANANA_MAX_PROMPT_LENGTH", "10000")),
         )
+
+    @property
+    def max_blend_images(self) -> int:
+        """Get the maximum number of images for blending based on the model.
+
+        - gemini-2.5-flash-image: 3 images max
+        - gemini-3-pro-image-preview: 14 images max (6 high-fidelity)
+        """
+        if "pro" in self.model_name.lower():
+            return 14
+        return 3
+
+    @property
+    def is_pro_model(self) -> bool:
+        """Check if the current model is a Pro model (supports advanced features)."""
+        return "pro" in self.model_name.lower()
 
 
 class ConfigurationError(Exception):
@@ -79,6 +118,15 @@ class GenerateImageRequest(BaseModel):
 
     prompt: Annotated[str, Field(min_length=1, description="Text description of the image")]
     save_path: Path | None = Field(default=None, description="Optional path to save the image")
+    aspect_ratio: AspectRatio | None = Field(
+        default=None, description="Aspect ratio for the generated image (default: 1:1)"
+    )
+    resolution: ImageResolution | None = Field(
+        default=None, description="Output resolution: 1K, 2K, or 4K (default: 1K)"
+    )
+    seed: int | None = Field(
+        default=None, ge=0, description="Seed for reproducible generation"
+    )
 
     @field_validator("prompt")
     @classmethod
