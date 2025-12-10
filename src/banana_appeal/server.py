@@ -165,6 +165,53 @@ def _log_metrics(metrics: APICallMetrics) -> None:
         logger.warning("API call failed", extra=log_data)
 
 
+# Mapping of image formats to valid file extensions
+FORMAT_EXTENSIONS: dict[ImageFormat, set[str]] = {
+    ImageFormat.JPEG: {".jpg", ".jpeg"},
+    ImageFormat.PNG: {".png"},
+    ImageFormat.WEBP: {".webp"},
+    ImageFormat.GIF: {".gif"},
+}
+
+
+def _correct_extension(
+    save_path: Path,
+    actual_format: ImageFormat,
+) -> tuple[Path, str | None]:
+    """Correct file extension to match actual image format.
+
+    Args:
+        save_path: The requested save path
+        actual_format: The actual image format from Gemini
+
+    Returns:
+        Tuple of (corrected_path, warning_message or None)
+    """
+    expected_exts = FORMAT_EXTENSIONS.get(actual_format, {".png"})
+    current_ext = save_path.suffix.lower()
+
+    # No extension provided
+    if not current_ext:
+        new_ext = ".jpg" if actual_format == ImageFormat.JPEG else f".{actual_format.value}"
+        corrected_path = save_path.with_suffix(new_ext)
+        warning = f"No extension provided; saved as {new_ext}"
+        return corrected_path, warning
+
+    # Extension matches (case-insensitive)
+    if current_ext in expected_exts:
+        return save_path, None
+
+    # Extension mismatch - correct it
+    new_ext = ".jpg" if actual_format == ImageFormat.JPEG else f".{actual_format.value}"
+    corrected_path = save_path.with_suffix(new_ext)
+    warning = (
+        f"Gemini returned {actual_format.value.upper()} image; "
+        f"saved as {new_ext} (requested {current_ext})"
+    )
+
+    return corrected_path, warning
+
+
 async def _call_gemini_api(
     contents: str | list[Any],
     operation: str,
