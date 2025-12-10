@@ -504,6 +504,116 @@ class TestModelValidation:
         assert "1K" in result  # Should list valid options
 
 
+class TestCorrectExtension:
+    """Tests for _correct_extension function."""
+
+    def test_matching_jpg_extension(self):
+        """Test that .jpg extension is not corrected for JPEG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.jpg"), ImageFormat.JPEG)
+        assert path == Path("/tmp/image.jpg")
+        assert warning is None
+
+    def test_matching_jpeg_extension(self):
+        """Test that .jpeg extension is not corrected for JPEG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.jpeg"), ImageFormat.JPEG)
+        assert path == Path("/tmp/image.jpeg")
+        assert warning is None
+
+    def test_matching_png_extension(self):
+        """Test that .png extension is not corrected for PNG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.png"), ImageFormat.PNG)
+        assert path == Path("/tmp/image.png")
+        assert warning is None
+
+    def test_json_to_jpg_correction(self):
+        """Test that .json is corrected to .jpg for JPEG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.json"), ImageFormat.JPEG)
+        assert path == Path("/tmp/image.jpg")
+        assert warning is not None
+        assert ".json" in warning
+        assert ".jpg" in warning
+        assert "JPEG" in warning
+
+    def test_png_to_jpg_correction(self):
+        """Test that .png is corrected to .jpg when Gemini returns JPEG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.png"), ImageFormat.JPEG)
+        assert path == Path("/tmp/image.jpg")
+        assert warning is not None
+        assert ".png" in warning
+        assert ".jpg" in warning
+
+    def test_uppercase_extension_normalized(self):
+        """Test that uppercase extensions are normalized and corrected."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.JSON"), ImageFormat.JPEG)
+        assert path == Path("/tmp/image.jpg")
+        assert warning is not None
+
+    def test_no_extension_appends_jpg(self):
+        """Test that missing extension gets .jpg appended for JPEG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image"), ImageFormat.JPEG)
+        assert path == Path("/tmp/image.jpg")
+        assert warning is not None
+        assert "No extension provided" in warning
+
+    def test_no_extension_appends_png(self):
+        """Test that missing extension gets .png appended for PNG."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image"), ImageFormat.PNG)
+        assert path == Path("/tmp/image.png")
+        assert warning is not None
+        assert "No extension provided" in warning
+
+    def test_webp_correction(self):
+        """Test correction to .webp format."""
+        from pathlib import Path
+
+        from banana_appeal.models import ImageFormat
+        from banana_appeal.server import _correct_extension
+
+        path, warning = _correct_extension(Path("/tmp/image.jpg"), ImageFormat.WEBP)
+        assert path == Path("/tmp/image.webp")
+        assert warning is not None
+
+
 class TestServerConfigProperties:
     """Tests for ServerConfig cached properties."""
 
