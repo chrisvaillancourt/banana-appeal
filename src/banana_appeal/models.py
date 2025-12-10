@@ -36,6 +36,33 @@ class ImageDimensions(BaseModel):
     height: int = Field(gt=0, description="Image height in pixels")
 
 
+class ImageOperationResponse(BaseModel):
+    """Structured response from image operations."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Always included
+    path: str | None = Field(default=None, description="Path where image was saved")
+    format: str = Field(description="Image format (jpeg, png, etc.)")
+    warnings: list[str] = Field(default_factory=list, description="Any warnings or corrections")
+
+    # Only set if correction occurred
+    original_path: str | None = Field(
+        default=None, description="Original requested path if extension was corrected"
+    )
+
+    # Verbose fields (only when verbose=True)
+    dimensions: ImageDimensions | None = Field(
+        default=None, description="Image dimensions in pixels"
+    )
+    size_bytes: int | None = Field(default=None, description="Image file size in bytes")
+    generation_time_ms: float | None = Field(
+        default=None, description="Generation time in milliseconds"
+    )
+    model: str | None = Field(default=None, description="Model used for generation")
+    seed: int | None = Field(default=None, description="Seed used for generation")
+
+
 class AspectRatio(StrEnum):
     """Supported aspect ratios for image generation."""
 
