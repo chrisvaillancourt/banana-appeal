@@ -27,6 +27,15 @@ class ImageFormat(StrEnum):
     GIF = "gif"
 
 
+class ImageDimensions(BaseModel):
+    """Image dimensions in pixels."""
+
+    model_config = ConfigDict(frozen=True)
+
+    width: int = Field(gt=0, description="Image width in pixels")
+    height: int = Field(gt=0, description="Image height in pixels")
+
+
 class AspectRatio(StrEnum):
     """Supported aspect ratios for image generation."""
 
