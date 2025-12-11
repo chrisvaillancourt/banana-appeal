@@ -244,6 +244,7 @@ class TestGenerateImage:
     async def test_generate_image_with_save(self, mock_genai_client, tmp_path):
         """Test image generation with save path."""
         from banana_appeal.models import ImageOperationResponse
+
         save_path = tmp_path / "output.png"
         result = await _generate_image_impl(
             prompt="a beautiful sunset",
@@ -281,6 +282,7 @@ class TestEditImage:
     async def test_edit_image_success(self, mock_genai_client, temp_image):
         """Test successful image editing."""
         from banana_appeal.models import ImageOperationResponse
+
         result = await _edit_image_impl(
             image_path=str(temp_image),
             edit_prompt="make it blue",
@@ -293,6 +295,7 @@ class TestEditImage:
     async def test_edit_image_custom_output(self, mock_genai_client, temp_image, tmp_path):
         """Test image editing with custom output path."""
         from banana_appeal.models import ImageOperationResponse
+
         output_path = tmp_path / "edited.png"
         result = await _edit_image_impl(
             image_path=str(temp_image),
@@ -698,6 +701,7 @@ class TestAddVerboseFields:
         import io
 
         from PIL import Image
+
         img = Image.new("RGB", (100, 50), color="red")
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
@@ -707,6 +711,7 @@ class TestAddVerboseFields:
     def base_response(self):
         """Create a base response to enhance."""
         from banana_appeal.models import ImageOperationResponse
+
         return ImageOperationResponse(
             path="/tmp/test.png",
             format="png",
@@ -717,6 +722,7 @@ class TestAddVerboseFields:
     async def test_adds_dimensions(self, sample_png_bytes, base_response):
         """Test that dimensions are extracted from image data."""
         from banana_appeal.server import _add_verbose_fields
+
         result = await _add_verbose_fields(
             base_response, sample_png_bytes, 1000.0, "test-model", None
         )
@@ -728,6 +734,7 @@ class TestAddVerboseFields:
     async def test_adds_size_bytes(self, sample_png_bytes, base_response):
         """Test that size_bytes is set to image data length."""
         from banana_appeal.server import _add_verbose_fields
+
         result = await _add_verbose_fields(
             base_response, sample_png_bytes, 1000.0, "test-model", None
         )
@@ -737,6 +744,7 @@ class TestAddVerboseFields:
     async def test_adds_generation_time(self, sample_png_bytes, base_response):
         """Test that generation_time_ms is passed through."""
         from banana_appeal.server import _add_verbose_fields
+
         result = await _add_verbose_fields(
             base_response, sample_png_bytes, 1234.5, "test-model", None
         )
@@ -746,6 +754,7 @@ class TestAddVerboseFields:
     async def test_adds_model_name(self, sample_png_bytes, base_response):
         """Test that model name is included."""
         from banana_appeal.server import _add_verbose_fields
+
         result = await _add_verbose_fields(
             base_response, sample_png_bytes, 1000.0, "gemini-2.5-flash", None
         )
@@ -755,6 +764,7 @@ class TestAddVerboseFields:
     async def test_adds_seed_when_provided(self, sample_png_bytes, base_response):
         """Test that seed is included when provided."""
         from banana_appeal.server import _add_verbose_fields
+
         result = await _add_verbose_fields(
             base_response, sample_png_bytes, 1000.0, "test-model", 42
         )
@@ -764,6 +774,7 @@ class TestAddVerboseFields:
     async def test_preserves_base_fields(self, sample_png_bytes, base_response):
         """Test that base response fields are preserved."""
         from banana_appeal.server import _add_verbose_fields
+
         result = await _add_verbose_fields(
             base_response, sample_png_bytes, 1000.0, "test-model", None
         )
@@ -782,30 +793,37 @@ class TestGenerateImageStructuredResponse:
         import io
 
         from PIL import Image as PILImage
+
         img = PILImage.new("RGB", (100, 50), color="blue")
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         png_bytes = buffer.getvalue()
 
         # Mock response structure matching Gemini API
-        mock_part = type('Part', (), {
-            'inline_data': type('InlineData', (), {
-                'data': png_bytes,
-                'mime_type': 'image/png'
-            })()
-        })()
-        mock_candidate = type('Candidate', (), {
-            'content': type('Content', (), {
-                'parts': [mock_part]
-            })()
-        })()
-        return type('Response', (), {'candidates': [mock_candidate]})()
+        mock_part = type(
+            "Part",
+            (),
+            {
+                "inline_data": type(
+                    "InlineData", (), {"data": png_bytes, "mime_type": "image/png"}
+                )()
+            },
+        )()
+        mock_candidate = type(
+            "Candidate", (), {"content": type("Content", (), {"parts": [mock_part]})()}
+        )()
+        return type("Response", (), {"candidates": [mock_candidate]})()
 
     @pytest.mark.asyncio
-    async def test_returns_dict_when_saving(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_returns_dict_when_saving(
+        self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test that saving returns a dict with path, format, warnings."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response)
+        )
 
         save_path = str(tmp_path / "test.png")
         result = await generate_image.fn(prompt="a blue square", save_path=save_path)
@@ -817,10 +835,15 @@ class TestGenerateImageStructuredResponse:
         assert result["format"] == "png"
 
     @pytest.mark.asyncio
-    async def test_extension_correction_in_response(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_extension_correction_in_response(
+        self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test that extension mismatch is corrected and reported."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response)
+        )
 
         # Request .jpg but Gemini returns PNG
         save_path = str(tmp_path / "test.jpg")
@@ -832,10 +855,15 @@ class TestGenerateImageStructuredResponse:
         assert len(result["warnings"]) > 0  # Warning present
 
     @pytest.mark.asyncio
-    async def test_verbose_adds_metadata(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_verbose_adds_metadata(
+        self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test that verbose=True adds metadata fields."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response)
+        )
 
         save_path = str(tmp_path / "test.png")
         result = await generate_image.fn(prompt="a blue square", save_path=save_path, verbose=True)
@@ -849,10 +877,15 @@ class TestGenerateImageStructuredResponse:
         assert "model" in result
 
     @pytest.mark.asyncio
-    async def test_verbose_false_excludes_metadata(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_verbose_false_excludes_metadata(
+        self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test that verbose=False (default) excludes metadata fields."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response)
+        )
 
         save_path = str(tmp_path / "test.png")
         result = await generate_image.fn(prompt="a blue square", save_path=save_path, verbose=False)
@@ -871,6 +904,7 @@ class TestEditImageStructuredResponse:
     def sample_input_image(self, tmp_path) -> Path:
         """Create a sample input image for editing."""
         from PIL import Image as PILImage
+
         img = PILImage.new("RGB", (200, 100), color="green")
         path = tmp_path / "input.png"
         img.save(path, format="PNG")
@@ -882,34 +916,38 @@ class TestEditImageStructuredResponse:
         import io
 
         from PIL import Image as PILImage
+
         img = PILImage.new("RGB", (200, 100), color="red")
         buffer = io.BytesIO()
         img.save(buffer, format="JPEG")
         jpeg_bytes = buffer.getvalue()
 
-        mock_part = type('Part', (), {
-            'inline_data': type('InlineData', (), {
-                'data': jpeg_bytes,
-                'mime_type': 'image/jpeg'
-            })()
-        })()
-        mock_candidate = type('Candidate', (), {
-            'content': type('Content', (), {
-                'parts': [mock_part]
-            })()
-        })()
-        return type('Response', (), {'candidates': [mock_candidate]})()
+        mock_part = type(
+            "Part",
+            (),
+            {
+                "inline_data": type(
+                    "InlineData", (), {"data": jpeg_bytes, "mime_type": "image/jpeg"}
+                )()
+            },
+        )()
+        mock_candidate = type(
+            "Candidate", (), {"content": type("Content", (), {"parts": [mock_part]})()}
+        )()
+        return type("Response", (), {"candidates": [mock_candidate]})()
 
     @pytest.mark.asyncio
-    async def test_returns_dict(self, sample_input_image, mock_edit_response, monkeypatch, mock_env_api_key):
+    async def test_returns_dict(
+        self, sample_input_image, mock_edit_response, monkeypatch, mock_env_api_key
+    ):
         """Test that edit_image returns a dict with path, format, warnings."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response))
 
-        result = await edit_image.fn(
-            image_path=str(sample_input_image),
-            edit_prompt="make it red"
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response)
         )
+
+        result = await edit_image.fn(image_path=str(sample_input_image), edit_prompt="make it red")
 
         assert isinstance(result, dict)
         assert "path" in result
@@ -917,17 +955,20 @@ class TestEditImageStructuredResponse:
         assert "warnings" in result
 
     @pytest.mark.asyncio
-    async def test_extension_correction(self, sample_input_image, mock_edit_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_extension_correction(
+        self, sample_input_image, mock_edit_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test that extension mismatch is corrected."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response)
+        )
 
         # Output path has .png but Gemini returns JPEG
         output_path = str(tmp_path / "output.png")
         result = await edit_image.fn(
-            image_path=str(sample_input_image),
-            edit_prompt="make it red",
-            output_path=output_path
+            image_path=str(sample_input_image), edit_prompt="make it red", output_path=output_path
         )
 
         assert isinstance(result, dict)
@@ -936,15 +977,18 @@ class TestEditImageStructuredResponse:
         assert len(result["warnings"]) > 0
 
     @pytest.mark.asyncio
-    async def test_verbose_mode(self, sample_input_image, mock_edit_response, monkeypatch, mock_env_api_key):
+    async def test_verbose_mode(
+        self, sample_input_image, mock_edit_response, monkeypatch, mock_env_api_key
+    ):
         """Test that verbose=True adds metadata."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response)
+        )
 
         result = await edit_image.fn(
-            image_path=str(sample_input_image),
-            edit_prompt="make it red",
-            verbose=True
+            image_path=str(sample_input_image), edit_prompt="make it red", verbose=True
         )
 
         assert isinstance(result, dict)
@@ -961,6 +1005,7 @@ class TestBlendImagesStructuredResponse:
     def sample_images(self, tmp_path) -> list[Path]:
         """Create sample images for blending."""
         from PIL import Image as PILImage
+
         paths = []
         for i, color in enumerate(["red", "blue"]):
             img = PILImage.new("RGB", (100, 100), color=color)
@@ -975,35 +1020,42 @@ class TestBlendImagesStructuredResponse:
         import io
 
         from PIL import Image as PILImage
+
         img = PILImage.new("RGB", (100, 100), color="purple")
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         png_bytes = buffer.getvalue()
 
-        mock_part = type('Part', (), {
-            'inline_data': type('InlineData', (), {
-                'data': png_bytes,
-                'mime_type': 'image/png'
-            })()
-        })()
-        mock_candidate = type('Candidate', (), {
-            'content': type('Content', (), {
-                'parts': [mock_part]
-            })()
-        })()
-        return type('Response', (), {'candidates': [mock_candidate]})()
+        mock_part = type(
+            "Part",
+            (),
+            {
+                "inline_data": type(
+                    "InlineData", (), {"data": png_bytes, "mime_type": "image/png"}
+                )()
+            },
+        )()
+        mock_candidate = type(
+            "Candidate", (), {"content": type("Content", (), {"parts": [mock_part]})()}
+        )()
+        return type("Response", (), {"candidates": [mock_candidate]})()
 
     @pytest.mark.asyncio
-    async def test_returns_dict_when_saving(self, sample_images, mock_blend_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_returns_dict_when_saving(
+        self, sample_images, mock_blend_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test that saving returns a dict."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response)
+        )
 
         output_path = str(tmp_path / "blended.png")
         result = await blend_images.fn(
             image_paths=[str(p) for p in sample_images],
             prompt="blend these",
-            output_path=output_path
+            output_path=output_path,
         )
 
         assert isinstance(result, dict)
@@ -1012,22 +1064,28 @@ class TestBlendImagesStructuredResponse:
         assert "warnings" in result
 
     @pytest.mark.asyncio
-    async def test_returns_image_when_inline(self, sample_images, mock_blend_response, monkeypatch, mock_env_api_key):
+    async def test_returns_image_when_inline(
+        self, sample_images, mock_blend_response, monkeypatch, mock_env_api_key
+    ):
         """Test that no output_path returns Image."""
         from unittest.mock import AsyncMock
 
         from fastmcp import Image
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response)
+        )
 
         result = await blend_images.fn(
-            image_paths=[str(p) for p in sample_images],
-            prompt="blend these"
+            image_paths=[str(p) for p in sample_images], prompt="blend these"
         )
 
         assert isinstance(result, Image)
 
     @pytest.mark.asyncio
-    async def test_extension_correction(self, sample_images, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_extension_correction(
+        self, sample_images, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test extension correction when format mismatches."""
         import io
 
@@ -1039,28 +1097,32 @@ class TestBlendImagesStructuredResponse:
         img.save(buffer, format="JPEG")
         jpeg_bytes = buffer.getvalue()
 
-        mock_part = type('Part', (), {
-            'inline_data': type('InlineData', (), {
-                'data': jpeg_bytes,
-                'mime_type': 'image/jpeg'
-            })()
-        })()
-        mock_candidate = type('Candidate', (), {
-            'content': type('Content', (), {
-                'parts': [mock_part]
-            })()
-        })()
-        mock_response = type('Response', (), {'candidates': [mock_candidate]})()
+        mock_part = type(
+            "Part",
+            (),
+            {
+                "inline_data": type(
+                    "InlineData", (), {"data": jpeg_bytes, "mime_type": "image/jpeg"}
+                )()
+            },
+        )()
+        mock_candidate = type(
+            "Candidate", (), {"content": type("Content", (), {"parts": [mock_part]})()}
+        )()
+        mock_response = type("Response", (), {"candidates": [mock_candidate]})()
 
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_response)
+        )
 
         # Request .png but get JPEG
         output_path = str(tmp_path / "blended.png")
         result = await blend_images.fn(
             image_paths=[str(p) for p in sample_images],
             prompt="blend these",
-            output_path=output_path
+            output_path=output_path,
         )
 
         assert isinstance(result, dict)
@@ -1068,17 +1130,22 @@ class TestBlendImagesStructuredResponse:
         assert result["original_path"] == output_path
 
     @pytest.mark.asyncio
-    async def test_verbose_mode(self, sample_images, mock_blend_response, tmp_path, monkeypatch, mock_env_api_key):
+    async def test_verbose_mode(
+        self, sample_images, mock_blend_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
         """Test verbose adds metadata."""
         from unittest.mock import AsyncMock
-        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response))
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response)
+        )
 
         output_path = str(tmp_path / "blended.png")
         result = await blend_images.fn(
             image_paths=[str(p) for p in sample_images],
             prompt="blend these",
             output_path=output_path,
-            verbose=True
+            verbose=True,
         )
 
         assert isinstance(result, dict)
