@@ -38,3 +38,9 @@ test_output/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Planning documents
+history/
