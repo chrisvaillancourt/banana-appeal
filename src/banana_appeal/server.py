@@ -126,6 +126,8 @@ def _is_non_retryable_client_error(exc: BaseException) -> bool:
 
 async def _save_image_async(path: Path, data: bytes) -> None:
     """Save image data to file asynchronously."""
+    # Ensure parent directories exist
+    await AsyncPath(path.parent).mkdir(parents=True, exist_ok=True)
     await AsyncPath(path).write_bytes(data)
     logger.debug("Image saved", extra={"path": str(path), "size_bytes": len(data)})
 
@@ -248,6 +250,7 @@ async def _add_verbose_fields(
         path=response.path,
         format=response.format,
         warnings=response.warnings,
+        original_path=response.original_path,
         dimensions=ImageDimensions(width=width, height=height),
         size_bytes=len(image_data),
         generation_time_ms=generation_time_ms,
