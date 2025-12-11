@@ -241,15 +241,17 @@ class TestGenerateImage:
 
     async def test_generate_image_with_save(self, mock_genai_client, tmp_path):
         """Test image generation with save path."""
+        from banana_appeal.models import ImageOperationResponse
         save_path = tmp_path / "output.png"
         result = await _generate_image_impl(
             prompt="a beautiful sunset",
             save_path=str(save_path),
         )
 
-        assert result.success is True
-        assert result.saved_path == save_path
-        assert result.data is None
+        # Now returns ImageOperationResponse when saving
+        assert isinstance(result, ImageOperationResponse)
+        assert result.path == str(save_path)
+        assert result.format == "png"
         assert save_path.exists()
 
     async def test_generate_image_no_result(self, mock_empty_response):
@@ -759,3 +761,95 @@ class TestAddVerboseFields:
         assert result.path == "/tmp/test.png"
         assert result.format == "png"
         assert result.warnings == ["test warning"]
+
+
+class TestGenerateImageStructuredResponse:
+    """Tests for generate_image structured response."""
+
+    @pytest.fixture
+    def mock_gemini_response(self):
+        """Create a mock Gemini response with image data."""
+        # Create a minimal PNG
+        import io
+
+        from PIL import Image as PILImage
+        img = PILImage.new("RGB", (100, 50), color="blue")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        png_bytes = buffer.getvalue()
+
+        # Mock response structure matching Gemini API
+        mock_part = type('Part', (), {
+            'inline_data': type('InlineData', (), {
+                'data': png_bytes,
+                'mime_type': 'image/png'
+            })()
+        })()
+        mock_candidate = type('Candidate', (), {
+            'content': type('Content', (), {
+                'parts': [mock_part]
+            })()
+        })()
+        return type('Response', (), {'candidates': [mock_candidate]})()
+
+    @pytest.mark.asyncio
+    async def test_returns_dict_when_saving(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+        """Test that saving returns a dict with path, format, warnings."""
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        save_path = str(tmp_path / "test.png")
+        result = await generate_image.fn(prompt="a blue square", save_path=save_path)
+
+        assert isinstance(result, dict)
+        assert "path" in result
+        assert "format" in result
+        assert "warnings" in result
+        assert result["format"] == "png"
+
+    @pytest.mark.asyncio
+    async def test_extension_correction_in_response(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+        """Test that extension mismatch is corrected and reported."""
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        # Request .jpg but Gemini returns PNG
+        save_path = str(tmp_path / "test.jpg")
+        result = await generate_image.fn(prompt="a blue square", save_path=save_path)
+
+        assert isinstance(result, dict)
+        assert result["path"].endswith(".png")  # Corrected
+        assert result["original_path"] == save_path  # Original preserved
+        assert len(result["warnings"]) > 0  # Warning present
+
+    @pytest.mark.asyncio
+    async def test_verbose_adds_metadata(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+        """Test that verbose=True adds metadata fields."""
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        save_path = str(tmp_path / "test.png")
+        result = await generate_image.fn(prompt="a blue square", save_path=save_path, verbose=True)
+
+        assert isinstance(result, dict)
+        assert "dimensions" in result
+        assert result["dimensions"]["width"] == 100
+        assert result["dimensions"]["height"] == 50
+        assert "size_bytes" in result
+        assert "generation_time_ms" in result
+        assert "model" in result
+
+    @pytest.mark.asyncio
+    async def test_verbose_false_excludes_metadata(self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key):
+        """Test that verbose=False (default) excludes metadata fields."""
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr("banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response))
+
+        save_path = str(tmp_path / "test.png")
+        result = await generate_image.fn(prompt="a blue square", save_path=save_path, verbose=False)
+
+        assert isinstance(result, dict)
+        assert "dimensions" not in result
+        assert "size_bytes" not in result
+        assert "generation_time_ms" not in result
+        assert "model" not in result
