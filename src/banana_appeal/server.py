@@ -37,7 +37,9 @@ from banana_appeal.models import (
     ConfigurationError,
     EditImageRequest,
     GenerateImageRequest,
+    ImageDimensions,
     ImageFormat,
+    ImageOperationResponse,
     ImageResolution,
     ImageResult,
     ServerConfig,
@@ -210,6 +212,46 @@ def _correct_extension(
     )
 
     return corrected_path, warning
+
+
+async def _add_verbose_fields(
+    response: ImageOperationResponse,
+    image_data: bytes,
+    generation_time_ms: float,
+    model_name: str,
+    seed: int | None,
+) -> ImageOperationResponse:
+    """Add verbose metadata fields to response.
+
+    Args:
+        response: Base response to enhance
+        image_data: Raw image data bytes
+        generation_time_ms: Time taken to generate image
+        model_name: Name of the model used
+        seed: Random seed used (if any)
+
+    Returns:
+        New ImageOperationResponse with verbose fields populated
+    """
+    # Extract dimensions from image header (fast, doesn't decode full image)
+    def get_dimensions() -> tuple[int, int]:
+        from PIL import Image
+        img = Image.open(io.BytesIO(image_data))
+        return img.size
+
+    width, height = await to_thread.run_sync(get_dimensions)
+
+    # Create new response with all fields from base response plus verbose fields
+    return ImageOperationResponse(
+        path=response.path,
+        format=response.format,
+        warnings=response.warnings,
+        dimensions=ImageDimensions(width=width, height=height),
+        size_bytes=len(image_data),
+        generation_time_ms=generation_time_ms,
+        model=model_name,
+        seed=seed,
+    )
 
 
 async def _call_gemini_api(
