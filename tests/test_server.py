@@ -782,6 +782,23 @@ class TestAddVerboseFields:
         assert result.format == "png"
         assert result.warnings == ["test warning"]
 
+    @pytest.mark.asyncio
+    async def test_preserves_original_path(self, sample_png_bytes):
+        """Test that original_path is preserved when present."""
+        from banana_appeal.models import ImageOperationResponse
+        from banana_appeal.server import _add_verbose_fields
+
+        base_response = ImageOperationResponse(
+            path="/tmp/test.png",
+            format="png",
+            warnings=["extension corrected"],
+            original_path="/tmp/test.jpg",
+        )
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1000.0, "test-model", None
+        )
+        assert result.original_path == "/tmp/test.jpg"
+
 
 class TestGenerateImageStructuredResponse:
     """Tests for generate_image structured response."""
@@ -896,6 +913,27 @@ class TestGenerateImageStructuredResponse:
         assert "generation_time_ms" not in result
         assert "model" not in result
 
+    @pytest.mark.asyncio
+    async def test_creates_parent_directories(
+        self, mock_gemini_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
+        """Test that parent directories are created when they don't exist."""
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_gemini_response)
+        )
+
+        # Nested path where parent dirs don't exist
+        nested_path = tmp_path / "nested" / "deep" / "dir" / "test.png"
+        assert not nested_path.parent.exists()
+
+        result = await generate_image.fn(prompt="a blue square", save_path=str(nested_path))
+
+        assert isinstance(result, dict)
+        assert nested_path.exists()
+        assert nested_path.parent.exists()
+
 
 class TestEditImageStructuredResponse:
     """Tests for edit_image structured response."""
@@ -996,6 +1034,31 @@ class TestEditImageStructuredResponse:
         assert "size_bytes" in result
         assert "generation_time_ms" in result
         assert "model" in result
+
+    @pytest.mark.asyncio
+    async def test_creates_parent_directories(
+        self, sample_input_image, mock_edit_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
+        """Test that parent directories are created when they don't exist."""
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response)
+        )
+
+        # Nested path where parent dirs don't exist
+        nested_path = tmp_path / "nested" / "deep" / "dir" / "output.jpg"
+        assert not nested_path.parent.exists()
+
+        result = await edit_image.fn(
+            image_path=str(sample_input_image),
+            edit_prompt="make it red",
+            output_path=str(nested_path),
+        )
+
+        assert isinstance(result, dict)
+        assert nested_path.exists()
+        assert nested_path.parent.exists()
 
 
 class TestBlendImagesStructuredResponse:
@@ -1153,3 +1216,28 @@ class TestBlendImagesStructuredResponse:
         assert "size_bytes" in result
         assert "generation_time_ms" in result
         assert "model" in result
+
+    @pytest.mark.asyncio
+    async def test_creates_parent_directories(
+        self, sample_images, mock_blend_response, tmp_path, monkeypatch, mock_env_api_key
+    ):
+        """Test that parent directories are created when they don't exist."""
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response)
+        )
+
+        # Nested path where parent dirs don't exist
+        nested_path = tmp_path / "nested" / "deep" / "dir" / "blended.png"
+        assert not nested_path.parent.exists()
+
+        result = await blend_images.fn(
+            image_paths=[str(p) for p in sample_images],
+            prompt="blend these",
+            output_path=str(nested_path),
+        )
+
+        assert isinstance(result, dict)
+        assert nested_path.exists()
+        assert nested_path.parent.exists()
