@@ -821,7 +821,9 @@ async def blend_images(
     output_path: Annotated[str | None, Field(description="Optional output path")] = None,
     verbose: Annotated[
         bool,
-        Field(description="Include metadata (dimensions, size, generation time, model)"),
+        Field(
+            description="Include detailed metadata (dimensions, size, generation time) in response"
+        ),
     ] = False,
     ctx: Context | None = None,
 ) -> Image | dict | str:
