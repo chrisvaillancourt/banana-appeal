@@ -676,3 +676,86 @@ class TestServerConfigProperties:
             config = ServerConfig(api_key="test", model_name=model)
             assert config.is_pro_model is False, f"{model} should NOT be Pro"
             assert config.max_blend_images == 3, f"{model} should have 3 max blend"
+
+
+class TestAddVerboseFields:
+    """Tests for _add_verbose_fields helper."""
+
+    @pytest.fixture
+    def sample_png_bytes(self) -> bytes:
+        """Create a minimal valid PNG image."""
+        import io
+
+        from PIL import Image
+        img = Image.new("RGB", (100, 50), color="red")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    @pytest.fixture
+    def base_response(self):
+        """Create a base response to enhance."""
+        from banana_appeal.models import ImageOperationResponse
+        return ImageOperationResponse(
+            path="/tmp/test.png",
+            format="png",
+            warnings=["test warning"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_adds_dimensions(self, sample_png_bytes, base_response):
+        """Test that dimensions are extracted from image data."""
+        from banana_appeal.server import _add_verbose_fields
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1000.0, "test-model", None
+        )
+        assert result.dimensions is not None
+        assert result.dimensions.width == 100
+        assert result.dimensions.height == 50
+
+    @pytest.mark.asyncio
+    async def test_adds_size_bytes(self, sample_png_bytes, base_response):
+        """Test that size_bytes is set to image data length."""
+        from banana_appeal.server import _add_verbose_fields
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1000.0, "test-model", None
+        )
+        assert result.size_bytes == len(sample_png_bytes)
+
+    @pytest.mark.asyncio
+    async def test_adds_generation_time(self, sample_png_bytes, base_response):
+        """Test that generation_time_ms is passed through."""
+        from banana_appeal.server import _add_verbose_fields
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1234.5, "test-model", None
+        )
+        assert result.generation_time_ms == 1234.5
+
+    @pytest.mark.asyncio
+    async def test_adds_model_name(self, sample_png_bytes, base_response):
+        """Test that model name is included."""
+        from banana_appeal.server import _add_verbose_fields
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1000.0, "gemini-2.5-flash", None
+        )
+        assert result.model == "gemini-2.5-flash"
+
+    @pytest.mark.asyncio
+    async def test_adds_seed_when_provided(self, sample_png_bytes, base_response):
+        """Test that seed is included when provided."""
+        from banana_appeal.server import _add_verbose_fields
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1000.0, "test-model", 42
+        )
+        assert result.seed == 42
+
+    @pytest.mark.asyncio
+    async def test_preserves_base_fields(self, sample_png_bytes, base_response):
+        """Test that base response fields are preserved."""
+        from banana_appeal.server import _add_verbose_fields
+        result = await _add_verbose_fields(
+            base_response, sample_png_bytes, 1000.0, "test-model", None
+        )
+        assert result.path == "/tmp/test.png"
+        assert result.format == "png"
+        assert result.warnings == ["test warning"]
