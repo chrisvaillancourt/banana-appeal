@@ -52,6 +52,43 @@ Use cases:
 
 **Tip:** To exceed the image limit, combine multiple images into a single collage first, then pass it as one image.
 
+### Structured Responses
+
+When saving images to disk, all tools return a structured response with metadata:
+
+```json
+{
+  "path": "/tmp/image.jpg",
+  "format": "jpeg",
+  "warnings": []
+}
+```
+
+**Extension Auto-Correction:** If you request a `.png` extension but Gemini returns JPEG, the file is saved with the correct `.jpg` extension and a warning is included:
+
+```json
+{
+  "path": "/tmp/image.jpg",
+  "format": "jpeg",
+  "warnings": ["Gemini returned JPEG image; saved as .jpg (requested .png)"],
+  "original_path": "/tmp/image.png"
+}
+```
+
+**Verbose Mode:** Pass `verbose=True` to include additional metadata:
+
+```json
+{
+  "path": "/tmp/image.jpg",
+  "format": "jpeg",
+  "warnings": [],
+  "dimensions": {"width": 1376, "height": 768},
+  "size_bytes": 689152,
+  "generation_time_ms": 3420.5,
+  "model": "gemini-2.5-flash-image"
+}
+```
+
 ### Text Rendering
 
 Gemini 3 Pro Image excels at generating legible, accurately-placed text:

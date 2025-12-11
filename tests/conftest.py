@@ -23,8 +23,10 @@ def reset_global_state():
 
 @pytest.fixture
 def mock_env_api_key(monkeypatch):
-    """Set mock API key in environment."""
+    """Set mock API key in environment and use default Flash model."""
     monkeypatch.setenv("GOOGLE_API_KEY", "test-api-key-12345")
+    # Ensure tests use Flash model by default (can be overridden in specific tests)
+    monkeypatch.setenv("BANANA_MODEL", "gemini-2.5-flash-image")
     return "test-api-key-12345"
 
 

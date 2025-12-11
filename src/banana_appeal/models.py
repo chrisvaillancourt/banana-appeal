@@ -27,6 +27,42 @@ class ImageFormat(StrEnum):
     GIF = "gif"
 
 
+class ImageDimensions(BaseModel):
+    """Image dimensions in pixels."""
+
+    model_config = ConfigDict(frozen=True)
+
+    width: int = Field(gt=0, description="Image width in pixels")
+    height: int = Field(gt=0, description="Image height in pixels")
+
+
+class ImageOperationResponse(BaseModel):
+    """Structured response from image operations."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Always included
+    path: str | None = Field(default=None, description="Path where image was saved")
+    format: str = Field(description="Image format (jpeg, png, etc.)")
+    warnings: list[str] = Field(default_factory=list, description="Any warnings or corrections")
+
+    # Only set if correction occurred
+    original_path: str | None = Field(
+        default=None, description="Original requested path if extension was corrected"
+    )
+
+    # Verbose fields (only when verbose=True)
+    dimensions: ImageDimensions | None = Field(
+        default=None, description="Image dimensions in pixels"
+    )
+    size_bytes: int | None = Field(default=None, description="Image file size in bytes")
+    generation_time_ms: float | None = Field(
+        default=None, description="Generation time in milliseconds"
+    )
+    model: str | None = Field(default=None, description="Model used for generation")
+    seed: int | None = Field(default=None, description="Seed used for generation")
+
+
 class AspectRatio(StrEnum):
     """Supported aspect ratios for image generation."""
 
@@ -153,11 +189,7 @@ class GenerateImageRequest(BaseModel):
     def validate_path(cls, v: str | Path | None) -> Path | None:
         if v is None:
             return None
-        path = Path(v)
-        # Ensure parent directory exists or can be created
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return Path(v)
 
 
 class EditImageRequest(BaseModel):
@@ -231,10 +263,7 @@ class BlendImagesRequest(BaseModel):
     def validate_output_path(cls, v: str | Path | None) -> Path | None:
         if v is None:
             return None
-        path = Path(v)
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return Path(v)
 
 
 class ImageResult(BaseModel):
