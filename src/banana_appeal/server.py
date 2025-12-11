@@ -601,8 +601,6 @@ async def _blend_images_impl(
     ctx: Context | None = None,
 ) -> ImageResult | ImageOperationResponse:
     """Internal implementation of blend_images."""
-    start_time = time.perf_counter()
-
     # Check model-specific limit before validation
     config = get_config()
     max_images = config.max_blend_images
@@ -642,6 +640,8 @@ async def _blend_images_impl(
     if load_errors:
         return ImageResult.from_error(f"Failed to load images: {', '.join(load_errors)}")
 
+    # Track generation time (API call only, not image loading)
+    start_time = time.perf_counter()
     try:
         response = await _call_gemini_api(
             [request.prompt, *images],
@@ -677,9 +677,7 @@ async def _blend_images_impl(
             path=str(corrected_path),
             format=fmt.value,
             warnings=warnings,
-            original_path=str(request.output_path)
-            if corrected_path != Path(request.output_path)
-            else None,
+            original_path=str(request.output_path) if warning else None,
         )
 
         # Save the image
