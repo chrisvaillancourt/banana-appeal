@@ -474,7 +474,10 @@ async def _generate_image_impl(
         corrected_path, warning = _correct_extension(request.save_path, fmt)
 
         # Save the image
-        await _save_image_async(corrected_path, image_data)
+        try:
+            await _save_image_async(corrected_path, image_data)
+        except OSError as e:
+            return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
         if ctx:
             await ctx.info(f"Image saved to {corrected_path}")
 
@@ -560,7 +563,10 @@ async def _edit_image_impl(
     corrected_path, warning = _correct_extension(save_to, fmt)
 
     # Save the image
-    await _save_image_async(corrected_path, image_data)
+    try:
+        await _save_image_async(corrected_path, image_data)
+    except OSError as e:
+        return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
 
     if ctx:
         await ctx.info(f"Edited image saved to {corrected_path}")
@@ -677,7 +683,10 @@ async def _blend_images_impl(
         )
 
         # Save the image
-        await _save_image_async(corrected_path, image_data)
+        try:
+            await _save_image_async(corrected_path, image_data)
+        except OSError as e:
+            return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
         if ctx:
             await ctx.info(f"Blended image saved to {corrected_path}")
 

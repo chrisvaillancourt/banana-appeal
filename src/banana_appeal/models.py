@@ -189,11 +189,7 @@ class GenerateImageRequest(BaseModel):
     def validate_path(cls, v: str | Path | None) -> Path | None:
         if v is None:
             return None
-        path = Path(v)
-        # Ensure parent directory exists or can be created
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return Path(v)
 
 
 class EditImageRequest(BaseModel):
@@ -267,10 +263,7 @@ class BlendImagesRequest(BaseModel):
     def validate_output_path(cls, v: str | Path | None) -> Path | None:
         if v is None:
             return None
-        path = Path(v)
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return Path(v)
 
 
 class ImageResult(BaseModel):
