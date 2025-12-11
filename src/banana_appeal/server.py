@@ -410,8 +410,9 @@ async def _generate_image_impl(
     aspect_ratio: AspectRatio | None = None,
     resolution: ImageResolution | None = None,
     seed: int | None = None,
+    verbose: bool = False,
     ctx: Context | None = None,
-) -> ImageResult:
+) -> ImageOperationResponse | ImageResult:
     """Internal implementation of generate_image."""
     # Validate resolution is supported by the current model
     config = get_config()
@@ -435,6 +436,9 @@ async def _generate_image_impl(
     if ctx:
         await ctx.info(f"Generating image: {request.prompt[:50]}...")
 
+    # Track generation time
+    start_time = time.perf_counter()
+
     try:
         response = await _call_gemini_api(
             request.prompt,
@@ -451,6 +455,9 @@ async def _generate_image_impl(
         logger.exception("Unexpected error in generate_image")
         return ImageResult.from_error(f"Unexpected error: {e}")
 
+    # Calculate generation time (before save)
+    generation_time_ms = (time.perf_counter() - start_time) * 1000
+
     result = _extract_image_data(response)
     if not result:
         return ImageResult.from_error("No image was generated")
@@ -458,10 +465,34 @@ async def _generate_image_impl(
     image_data, fmt = result
 
     if request.save_path:
-        await _save_image_async(request.save_path, image_data)
+        # Correct extension if needed
+        corrected_path, warning = _correct_extension(request.save_path, fmt)
+
+        # Save the image
+        await _save_image_async(corrected_path, image_data)
         if ctx:
-            await ctx.info(f"Image saved to {request.save_path}")
-        return ImageResult.from_saved(request.save_path, fmt)
+            await ctx.info(f"Image saved to {corrected_path}")
+
+        # Build structured response
+        warnings = [warning] if warning else []
+        response = ImageOperationResponse(
+            path=str(corrected_path),
+            format=fmt.value,
+            warnings=warnings,
+            original_path=str(request.save_path) if warning else None,
+        )
+
+        # Add verbose fields if requested
+        if verbose:
+            response = await _add_verbose_fields(
+                response,
+                image_data,
+                generation_time_ms,
+                config.model_name,
+                seed,
+            )
+
+        return response
 
     return ImageResult.from_data(image_data, fmt)
 
@@ -609,8 +640,12 @@ async def generate_image(
         Field(description="Output resolution: 1K (default), 2K, or 4K (2K/4K require Pro model)"),
     ] = None,
     seed: Annotated[int | None, Field(description="Seed for reproducible generation")] = None,
+    verbose: Annotated[
+        bool,
+        Field(description="Include detailed metadata (dimensions, size, generation time) in response"),
+    ] = False,
     ctx: Context | None = None,
-) -> Image | str:
+) -> Image | dict | str:
     """Generate an image from a text prompt using Gemini.
 
     Returns the generated image, or saves it to the specified path.
@@ -634,15 +669,23 @@ async def generate_image(
         aspect_ratio=ar,
         resolution=res,
         seed=seed,
+        verbose=verbose,
         ctx=ctx,
     )
 
+    # Handle structured response (when saving with save_path)
+    if isinstance(result, ImageOperationResponse):
+        return result.model_dump(exclude_none=True)
+
+    # Handle error result
     if not result.success:
         return f"Error: {result.error}"
 
+    # Handle saved path (legacy path, should not happen now)
     if result.saved_path:
         return f"Image saved to {result.saved_path}"
 
+    # Handle inline image data
     if result.data:
         return Image(data=result.data, format=result.format.value)
 
