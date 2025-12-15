@@ -581,11 +581,31 @@ async def _edit_image_impl(
     except OSError as e:
         return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
 
+    # If overwriting original (output_path=None) and extension changed,
+    # delete the original file to avoid leaving orphaned files
+    original_deleted = False
+    if request.output_path is None and corrected_path != request.image_path:
+        try:
+            await AsyncPath(request.image_path).unlink()
+            original_deleted = True
+            logger.debug(
+                "Deleted original after extension correction",
+                extra={"original": str(request.image_path), "new": str(corrected_path)},
+            )
+        except OSError as e:
+            logger.warning(
+                "Failed to delete original after extension correction",
+                extra={"original": str(request.image_path), "error": str(e)},
+            )
+
     if ctx:
         await ctx.info(f"Edited image saved to {corrected_path}")
 
     # Build structured response
-    warnings = [warning] if warning else []
+    warnings: list[str] = []
+    if warning:
+        suffix = "; original file deleted" if original_deleted else ""
+        warnings.append(f"{warning}{suffix}")
     response_obj = ImageOperationResponse(
         path=str(corrected_path),
         format=fmt.value,

@@ -1038,6 +1038,43 @@ class TestEditImageStructuredResponse:
         assert len(result["warnings"]) > 0
 
     @pytest.mark.asyncio
+    async def test_original_deleted_on_inplace_extension_correction(
+        self, sample_input_image, mock_edit_response, monkeypatch, mock_env_api_key
+    ):
+        """Test that original file is deleted when extension corrected during in-place edit.
+
+        When output_path=None (overwrite original) and Gemini returns a different format,
+        the original file should be deleted to avoid leaving orphaned files.
+        """
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(
+            "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_edit_response)
+        )
+
+        # Verify input exists and is a .png
+        assert sample_input_image.exists()
+        assert sample_input_image.suffix == ".png"
+        original_path = sample_input_image
+
+        # Edit in-place (output_path=None) - Gemini returns JPEG
+        result = await edit_image.fn(
+            image_path=str(sample_input_image), edit_prompt="make it red", output_path=None
+        )
+
+        assert isinstance(result, dict)
+        # New file has corrected extension
+        assert result["path"].endswith(".jpg")
+        # Original path is recorded in response
+        assert result["original_path"] == str(original_path)
+        # Warning mentions original was deleted
+        assert any("original file deleted" in w for w in result["warnings"])
+        # New .jpg file exists
+        assert Path(result["path"]).exists()
+        # Original .png file was deleted
+        assert not original_path.exists()
+
+    @pytest.mark.asyncio
     async def test_verbose_mode(
         self, sample_input_image, mock_edit_response, monkeypatch, mock_env_api_key
     ):
