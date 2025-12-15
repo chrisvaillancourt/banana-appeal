@@ -237,21 +237,34 @@ async def _add_verbose_fields(
     """
 
     # Extract dimensions from image header (fast, doesn't decode full image)
-    def get_dimensions() -> tuple[int, int]:
-        from PIL import Image
+    def get_dimensions() -> tuple[int, int] | None:
+        from PIL import Image, UnidentifiedImageError
 
-        img = Image.open(io.BytesIO(image_data))
-        return img.size
+        try:
+            img = Image.open(io.BytesIO(image_data))
+            return img.size
+        except (UnidentifiedImageError, OSError):
+            return None
 
-    width, height = await to_thread.run_sync(get_dimensions)
+    size_result = await to_thread.run_sync(get_dimensions)
+
+    # Build dimensions and warnings based on extraction result
+    dimensions: ImageDimensions | None = None
+    warnings = list(response.warnings) if response.warnings else []
+
+    if size_result is not None:
+        width, height = size_result
+        dimensions = ImageDimensions(width=width, height=height)
+    else:
+        warnings.append("Could not extract image dimensions")
 
     # Create new response with all fields from base response plus verbose fields
     return ImageOperationResponse(
         path=response.path,
         format=response.format,
-        warnings=response.warnings,
+        warnings=warnings,
         original_path=response.original_path,
-        dimensions=ImageDimensions(width=width, height=height),
+        dimensions=dimensions,
         size_bytes=len(image_data),
         generation_time_ms=generation_time_ms,
         model=model_name,

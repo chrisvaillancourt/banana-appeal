@@ -799,6 +799,29 @@ class TestAddVerboseFields:
         )
         assert result.original_path == "/tmp/test.jpg"
 
+    @pytest.mark.asyncio
+    async def test_handles_pillow_decode_error(self, base_response):
+        """Test that Pillow decode errors return base response with warning."""
+        from banana_appeal.server import _add_verbose_fields
+
+        # Invalid image data that Pillow can't decode
+        corrupt_data = b"not a valid image format at all"
+
+        result = await _add_verbose_fields(base_response, corrupt_data, 1000.0, "test-model", 42)
+
+        # Should return response with base fields preserved
+        assert result.path == "/tmp/test.png"
+        assert result.format == "png"
+        # Should have warning about decode failure
+        assert any("dimension" in w.lower() for w in result.warnings)
+        # Dimensions should be None (couldn't extract)
+        assert result.dimensions is None
+        # Other verbose fields should still be populated
+        assert result.size_bytes == len(corrupt_data)
+        assert result.generation_time_ms == 1000.0
+        assert result.model == "test-model"
+        assert result.seed == 42
+
 
 class TestGenerateImageStructuredResponse:
     """Tests for generate_image structured response."""
