@@ -632,7 +632,7 @@ async def _blend_images_impl(
     output_path: str | None = None,
     verbose: bool = False,
     ctx: Context | None = None,
-) -> ImageResult | ImageOperationResponse:
+) -> ImageOperationResponse | ImageResult:
     """Internal implementation of blend_images."""
     # Check model-specific limit before validation
     config = get_config()

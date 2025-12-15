@@ -1193,7 +1193,7 @@ class TestBlendImagesStructuredResponse:
         """Test that no output_path returns Image."""
         from unittest.mock import AsyncMock
 
-        from fastmcp import Image
+        from fastmcp.utilities.types import Image
 
         monkeypatch.setattr(
             "banana_appeal.server._call_gemini_api", AsyncMock(return_value=mock_blend_response)
