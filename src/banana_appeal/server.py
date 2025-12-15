@@ -37,7 +37,9 @@ from banana_appeal.models import (
     ConfigurationError,
     EditImageRequest,
     GenerateImageRequest,
+    ImageDimensions,
     ImageFormat,
+    ImageOperationResponse,
     ImageResolution,
     ImageResult,
     ServerConfig,
@@ -124,6 +126,8 @@ def _is_non_retryable_client_error(exc: BaseException) -> bool:
 
 async def _save_image_async(path: Path, data: bytes) -> None:
     """Save image data to file asynchronously."""
+    # Ensure parent directories exist
+    await AsyncPath(path.parent).mkdir(parents=True, exist_ok=True)
     await AsyncPath(path).write_bytes(data)
     logger.debug("Image saved", extra={"path": str(path), "size_bytes": len(data)})
 
@@ -163,6 +167,109 @@ def _log_metrics(metrics: APICallMetrics) -> None:
         logger.info("API call completed", extra=log_data)
     else:
         logger.warning("API call failed", extra=log_data)
+
+
+# Mapping of image formats to valid file extensions
+FORMAT_EXTENSIONS: dict[ImageFormat, set[str]] = {
+    ImageFormat.JPEG: {".jpg", ".jpeg"},
+    ImageFormat.PNG: {".png"},
+    ImageFormat.WEBP: {".webp"},
+    ImageFormat.GIF: {".gif"},
+}
+
+
+def _correct_extension(
+    save_path: Path,
+    actual_format: ImageFormat,
+) -> tuple[Path, str | None]:
+    """Correct file extension to match actual image format.
+
+    Args:
+        save_path: The requested save path
+        actual_format: The actual image format from Gemini
+
+    Returns:
+        Tuple of (corrected_path, warning_message or None)
+    """
+    expected_exts = FORMAT_EXTENSIONS.get(actual_format, {".png"})
+    current_ext = save_path.suffix.lower()
+
+    # No extension provided
+    if not current_ext:
+        new_ext = ".jpg" if actual_format == ImageFormat.JPEG else f".{actual_format.value}"
+        corrected_path = save_path.with_suffix(new_ext)
+        warning = f"No extension provided; saved as {new_ext}"
+        return corrected_path, warning
+
+    # Extension matches (case-insensitive)
+    if current_ext in expected_exts:
+        return save_path, None
+
+    # Extension mismatch - correct it
+    new_ext = ".jpg" if actual_format == ImageFormat.JPEG else f".{actual_format.value}"
+    corrected_path = save_path.with_suffix(new_ext)
+    warning = (
+        f"Gemini returned {actual_format.value.upper()} image; "
+        f"saved as {new_ext} (requested {current_ext})"
+    )
+
+    return corrected_path, warning
+
+
+async def _add_verbose_fields(
+    response: ImageOperationResponse,
+    image_data: bytes,
+    generation_time_ms: float,
+    model_name: str,
+    seed: int | None,
+) -> ImageOperationResponse:
+    """Add verbose metadata fields to response.
+
+    Args:
+        response: Base response to enhance
+        image_data: Raw image data bytes
+        generation_time_ms: Time taken to generate image
+        model_name: Name of the model used
+        seed: Random seed used (if any)
+
+    Returns:
+        New ImageOperationResponse with verbose fields populated
+    """
+
+    # Extract dimensions from image header (fast, doesn't decode full image)
+    def get_dimensions() -> tuple[int, int] | None:
+        from PIL import Image, UnidentifiedImageError
+
+        try:
+            img = Image.open(io.BytesIO(image_data))
+            return img.size
+        except (UnidentifiedImageError, OSError):
+            return None
+
+    size_result = await to_thread.run_sync(get_dimensions)
+
+    # Build dimensions and warnings based on extraction result
+    dimensions: ImageDimensions | None = None
+    warnings = list(response.warnings) if response.warnings else []
+
+    if size_result is not None:
+        width, height = size_result
+        dimensions = ImageDimensions(width=width, height=height)
+    else:
+        warnings.append("Could not extract image dimensions")
+
+    # Create new response with all fields from base response plus verbose fields
+    return ImageOperationResponse(
+        path=response.path,
+        format=response.format,
+        warnings=warnings,
+        original_path=response.original_path,
+        dimensions=dimensions,
+        size_bytes=len(image_data),
+        generation_time_ms=generation_time_ms,
+        model=model_name,
+        seed=seed,
+    )
 
 
 async def _call_gemini_api(
@@ -321,8 +428,9 @@ async def _generate_image_impl(
     aspect_ratio: AspectRatio | None = None,
     resolution: ImageResolution | None = None,
     seed: int | None = None,
+    verbose: bool = False,
     ctx: Context | None = None,
-) -> ImageResult:
+) -> ImageOperationResponse | ImageResult:
     """Internal implementation of generate_image."""
     # Validate resolution is supported by the current model
     config = get_config()
@@ -346,6 +454,9 @@ async def _generate_image_impl(
     if ctx:
         await ctx.info(f"Generating image: {request.prompt[:50]}...")
 
+    # Track generation time
+    start_time = time.perf_counter()
+
     try:
         response = await _call_gemini_api(
             request.prompt,
@@ -362,6 +473,9 @@ async def _generate_image_impl(
         logger.exception("Unexpected error in generate_image")
         return ImageResult.from_error(f"Unexpected error: {e}")
 
+    # Calculate generation time (before save)
+    generation_time_ms = (time.perf_counter() - start_time) * 1000
+
     result = _extract_image_data(response)
     if not result:
         return ImageResult.from_error("No image was generated")
@@ -369,10 +483,37 @@ async def _generate_image_impl(
     image_data, fmt = result
 
     if request.save_path:
-        await _save_image_async(request.save_path, image_data)
+        # Correct extension if needed
+        corrected_path, warning = _correct_extension(request.save_path, fmt)
+
+        # Save the image
+        try:
+            await _save_image_async(corrected_path, image_data)
+        except OSError as e:
+            return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
         if ctx:
-            await ctx.info(f"Image saved to {request.save_path}")
-        return ImageResult.from_saved(request.save_path, fmt)
+            await ctx.info(f"Image saved to {corrected_path}")
+
+        # Build structured response
+        warnings = [warning] if warning else []
+        response = ImageOperationResponse(
+            path=str(corrected_path),
+            format=fmt.value,
+            warnings=warnings,
+            original_path=str(request.save_path) if warning else None,
+        )
+
+        # Add verbose fields if requested
+        if verbose:
+            response = await _add_verbose_fields(
+                response,
+                image_data,
+                generation_time_ms,
+                config.model_name,
+                seed,
+            )
+
+        return response
 
     return ImageResult.from_data(image_data, fmt)
 
@@ -381,9 +522,12 @@ async def _edit_image_impl(
     image_path: str,
     edit_prompt: str,
     output_path: str | None = None,
+    verbose: bool = False,
     ctx: Context | None = None,
-) -> ImageResult:
+) -> ImageOperationResponse | ImageResult:
     """Internal implementation of edit_image."""
+    config = get_config()
+
     try:
         request = EditImageRequest(
             image_path=image_path,
@@ -401,6 +545,9 @@ async def _edit_image_impl(
     except Exception as e:
         return ImageResult.from_error(f"Failed to load image: {e}")
 
+    # Track generation time
+    start_time = time.perf_counter()
+
     try:
         response = await _call_gemini_api(
             [request.edit_prompt, image],
@@ -415,26 +562,77 @@ async def _edit_image_impl(
         logger.exception("Unexpected error in edit_image")
         return ImageResult.from_error(f"Unexpected error: {e}")
 
+    # Calculate generation time (before save)
+    generation_time_ms = (time.perf_counter() - start_time) * 1000
+
     result = _extract_image_data(response)
     if not result:
         return ImageResult.from_error("Image editing failed - no output generated")
 
     image_data, fmt = result
     save_to = request.output_path or request.image_path
-    await _save_image_async(save_to, image_data)
+
+    # Correct extension if needed
+    corrected_path, warning = _correct_extension(save_to, fmt)
+
+    # Save the image
+    try:
+        await _save_image_async(corrected_path, image_data)
+    except OSError as e:
+        return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
+
+    # If overwriting original (output_path=None) and extension changed,
+    # delete the original file to avoid leaving orphaned files
+    original_deleted = False
+    if request.output_path is None and corrected_path != request.image_path:
+        try:
+            await AsyncPath(request.image_path).unlink()
+            original_deleted = True
+            logger.debug(
+                "Deleted original after extension correction",
+                extra={"original": str(request.image_path), "new": str(corrected_path)},
+            )
+        except OSError as e:
+            logger.warning(
+                "Failed to delete original after extension correction",
+                extra={"original": str(request.image_path), "error": str(e)},
+            )
 
     if ctx:
-        await ctx.info(f"Edited image saved to {save_to}")
+        await ctx.info(f"Edited image saved to {corrected_path}")
 
-    return ImageResult.from_saved(save_to, fmt)
+    # Build structured response
+    warnings: list[str] = []
+    if warning:
+        suffix = "; original file deleted" if original_deleted else ""
+        warnings.append(f"{warning}{suffix}")
+    response_obj = ImageOperationResponse(
+        path=str(corrected_path),
+        format=fmt.value,
+        warnings=warnings,
+        original_path=str(save_to) if warning else None,
+    )
+
+    # Add verbose fields if requested
+    if verbose:
+        response_obj = await _add_verbose_fields(
+            response_obj,
+            image_data,
+            generation_time_ms,
+            config.model_name,
+            None,  # edit doesn't use seed
+        )
+
+    return response_obj
 
 
 async def _blend_images_impl(
     image_paths: list[str],
     prompt: str,
     output_path: str | None = None,
+    verbose: bool = False,
     ctx: Context | None = None,
-) -> ImageResult:
+) -> ImageOperationResponse | ImageResult:
     """Internal implementation of blend_images."""
     # Check model-specific limit before validation
     config = get_config()
@@ -475,12 +673,15 @@ async def _blend_images_impl(
     if load_errors:
         return ImageResult.from_error(f"Failed to load images: {', '.join(load_errors)}")
 
+    # Track generation time (API call only, not image loading)
+    start_time = time.perf_counter()
     try:
         response = await _call_gemini_api(
             [request.prompt, *images],
             operation="blend",
             image_count=len(images),
         )
+        generation_time_ms = (time.perf_counter() - start_time) * 1000
     except GeminiAPIError as e:
         return ImageResult.from_error(str(e))
     except genai_errors.APIError as e:
@@ -496,10 +697,41 @@ async def _blend_images_impl(
     image_data, fmt = result
 
     if request.output_path:
-        await _save_image_async(request.output_path, image_data)
+        # Correct extension if needed
+        corrected_path, warning = _correct_extension(Path(request.output_path), fmt)
+
+        # Build warnings list
+        warnings: list[str] = []
+        if warning:
+            warnings.append(warning)
+
+        # Create base response with original_path if corrected
+        base_response = ImageOperationResponse(
+            path=str(corrected_path),
+            format=fmt.value,
+            warnings=warnings,
+            original_path=str(request.output_path) if warning else None,
+        )
+
+        # Save the image
+        try:
+            await _save_image_async(corrected_path, image_data)
+        except OSError as e:
+            return ImageResult.from_error(f"Failed to save image to {corrected_path}: {e}")
         if ctx:
-            await ctx.info(f"Blended image saved to {request.output_path}")
-        return ImageResult.from_saved(request.output_path, fmt)
+            await ctx.info(f"Blended image saved to {corrected_path}")
+
+        # Add verbose fields if requested
+        if verbose:
+            return await _add_verbose_fields(
+                base_response,
+                image_data,
+                generation_time_ms,
+                config.model_name,
+                None,  # blend doesn't use seed
+            )
+
+        return base_response
 
     return ImageResult.from_data(image_data, fmt)
 
@@ -520,8 +752,14 @@ async def generate_image(
         Field(description="Output resolution: 1K (default), 2K, or 4K (2K/4K require Pro model)"),
     ] = None,
     seed: Annotated[int | None, Field(description="Seed for reproducible generation")] = None,
+    verbose: Annotated[
+        bool,
+        Field(
+            description="Include detailed metadata (dimensions, size, generation time) in response"
+        ),
+    ] = False,
     ctx: Context | None = None,
-) -> Image | str:
+) -> Image | dict | str:
     """Generate an image from a text prompt using Gemini.
 
     Returns the generated image, or saves it to the specified path.
@@ -545,15 +783,23 @@ async def generate_image(
         aspect_ratio=ar,
         resolution=res,
         seed=seed,
+        verbose=verbose,
         ctx=ctx,
     )
 
+    # Handle structured response (when saving with save_path)
+    if isinstance(result, ImageOperationResponse):
+        return result.model_dump(exclude_none=True)
+
+    # Handle error result
     if not result.success:
         return f"Error: {result.error}"
 
+    # Handle saved path (legacy path, should not happen now)
     if result.saved_path:
         return f"Image saved to {result.saved_path}"
 
+    # Handle inline image data
     if result.data:
         return Image(data=result.data, format=result.format.value)
 
@@ -567,8 +813,14 @@ async def edit_image(
     output_path: Annotated[
         str | None, Field(description="Output path (default: overwrite original)")
     ] = None,
+    verbose: Annotated[
+        bool,
+        Field(
+            description="Include detailed metadata (dimensions, size, generation time) in response"
+        ),
+    ] = False,
     ctx: Context | None = None,
-) -> str:
+) -> dict | str:
     """Edit an existing image using natural language instructions.
 
     Modifies the image according to the edit prompt and saves the result.
@@ -577,12 +829,19 @@ async def edit_image(
         image_path=image_path,
         edit_prompt=edit_prompt,
         output_path=output_path,
+        verbose=verbose,
         ctx=ctx,
     )
 
+    # Handle structured response (edit_image always saves)
+    if isinstance(result, ImageOperationResponse):
+        return result.model_dump(exclude_none=True)
+
+    # Handle error result
     if not result.success:
         return f"Error: {result.error}"
 
+    # Legacy path (should not happen now)
     return f"Edited image saved to {result.saved_path}"
 
 
@@ -593,8 +852,14 @@ async def blend_images(
     ],
     prompt: Annotated[str, Field(min_length=1, description="Blending instructions")],
     output_path: Annotated[str | None, Field(description="Optional output path")] = None,
+    verbose: Annotated[
+        bool,
+        Field(
+            description="Include detailed metadata (dimensions, size, generation time) in response"
+        ),
+    ] = False,
     ctx: Context | None = None,
-) -> Image | str:
+) -> Image | dict | str:
     """Blend multiple images together with a creative prompt.
 
     Combines up to 14 images according to the prompt instructions.
@@ -604,19 +869,22 @@ async def blend_images(
         image_paths=image_paths,
         prompt=prompt,
         output_path=output_path,
+        verbose=verbose,
         ctx=ctx,
     )
 
-    if not result.success:
-        return f"Error: {result.error}"
+    # Handle ImageResult (errors or inline data)
+    if isinstance(result, ImageResult):
+        if not result.success:
+            return f"Error: {result.error}"
 
-    if result.saved_path:
-        return f"Blended image saved to {result.saved_path}"
+        if result.data:
+            return Image(data=result.data, format=result.format.value)
 
-    if result.data:
-        return Image(data=result.data, format=result.format.value)
+        return "Error: No image data"
 
-    return "Error: No image data"
+    # Handle ImageOperationResponse (saved with structured response)
+    return result.model_dump(exclude_none=True)
 
 
 def main() -> None:
