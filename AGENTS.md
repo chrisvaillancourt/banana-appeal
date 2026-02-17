@@ -69,7 +69,7 @@ This project uses [bd (beads)](https://github.com/steveyegge/beads) for issue tr
 - Use `--json` flags for programmatic parsing
 
 **At Session End:**
-> **CRITICAL**: Run `bd sync` to flush changes and push. Work is not done until synced.
+> Issue data persists immediately in Dolt — no sync step needed. Push your branch before claiming done.
 
 ### Commands Reference
 
@@ -95,7 +95,7 @@ bd dep tree <id>                   # View hierarchy
 bd blocked                         # Show blocked issues
 
 # Maintenance
-bd sync                            # Force sync (ALWAYS run at session end)
+bd import                          # Import issues (if needed)
 bd duplicates                      # Find duplicates
 ```
 
@@ -151,7 +151,7 @@ Verify with `bd blocked` - tasks should be blocked by their actual prerequisites
 
 1. **Always include descriptions** - Issues without context waste future time
 2. **Use `--json` flags** - Essential for programmatic parsing by agents
-3. **Run `bd sync` at session end** - Prevents data loss
+3. **Push your branch at session end** - Prevents code loss
 4. **Check `bd ready` first** - Shows unblocked work automatically
 5. **Link discovered issues** - Use `--deps discovered-from:<id>` to track where issues came from
 
@@ -184,7 +184,6 @@ history/
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
