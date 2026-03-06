@@ -15,24 +15,6 @@ Rename the project from `banana-appeal` to `depict-mcp` to follow MCP naming con
 - Max 64 characters
 - Avoid "server" in the name
 
-## Beads Migration
-
-**Prefix change:** `banana-appeal-` → `d-`
-
-The `d-` prefix is the shortest valid option (2 chars), saving tokens in every issue reference.
-
-```bash
-bd rename-prefix d- --dry-run  # Preview
-bd rename-prefix d-            # Apply
-```
-
-This updates:
-- All 24 issue IDs
-- All dependency references
-- Text references in descriptions
-
-**Run this first**, before any file renames.
-
 ## Source Code Changes
 
 ### Directory Rename
@@ -81,11 +63,10 @@ Change: `from banana_appeal` → `from depict_mcp`
 
 ## Execution Order
 
-1. `bd rename-prefix d-` (before file changes)
-2. `mv src/banana_appeal src/depict_mcp`
-3. Update file contents (pyproject.toml, tests, docs, workflows)
-4. `uv sync --dev` (regenerate lock file)
-5. Verify: `uv run pytest && uv run ruff check . && bd list --status=open`
+1. `mv src/banana_appeal src/depict_mcp`
+2. Update file contents (pyproject.toml, tests, docs, workflows)
+3. `uv sync --dev` (regenerate lock file)
+4. Verify: `uv run pytest && uv run ruff check .`
 6. Commit: `git commit -m "chore!: rename project from banana-appeal to depict-mcp"`
 
 ## Notes
